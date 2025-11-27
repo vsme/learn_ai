@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LangChain TextSplitter 全流程可视化 (详细版)</title>
+    <title>LangChain Recursive TextSplitter Logic Visualizer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -11,906 +11,849 @@
         body { font-family: 'Segoe UI', sans-serif; }
         .code-font { font-family: 'JetBrains Mono', monospace; }
         
-        /* Tree Connector Lines */
+        /* Tree Lines */
         .tree-children {
             position: relative;
-            padding-left: 24px;
-            margin-left: 12px;
+            padding-left: 20px;
+            margin-left: 10px;
             border-left: 2px dashed #e2e8f0;
         }
         
-        /* Node Styles */
-        .node-card {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            opacity: 0.5;
-            transform: scale(0.98);
-            border-width: 1px;
+        /* Node Animations */
+        .node-enter { animation: slideIn 0.3s ease-out forwards; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
         }
-        .node-visible { opacity: 1; transform: scale(1); }
-        .node-active {
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+
+        .highlight-active {
+            box-shadow: 0 0 0 2px #3b82f6;
             border-color: #3b82f6 !important;
-            opacity: 1 !important;
-            z-index: 10;
-            background-color: #fff;
+            background-color: #eff6ff !important;
         }
-        .node-ignored {
-            opacity: 0.4 !important;
-            background-color: #f3f4f6 !important;
-            border-color: #d1d5db !important;
-            color: #9ca3af !important;
-        }
-        .node-ignored .node-content { text-decoration: line-through; }
-        
-        /* Phase Highlights */
-        .node-merging {
-            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4);
+
+        .highlight-recurse {
+            box-shadow: 0 0 0 2px #f59e0b;
             border-color: #f59e0b !important;
             background-color: #fffbeb !important;
-            opacity: 1 !important;
         }
 
         /* Code Highlighting */
         .code-line {
-            padding: 0 12px;
+            padding-left: 12px;
             border-left: 3px solid transparent;
-            opacity: 0.4;
+            opacity: 0.6;
             transition: all 0.1s;
-            line-height: 1.5;
         }
-        .code-line.active {
-            background-color: #374151;
-            border-left-color: #fbbf24;
-            color: #fff;
+        .code-line.active-line {
+            background-color: #374151; /* slate-700 */
+            border-left-color: #fbbf24; /* amber-400 */
             opacity: 1;
-            font-weight: 600;
+            color: white;
         }
 
-        /* Animations */
-        @keyframes slideInRight {
-            from { opacity: 0; transform: translateX(20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes popOut {
-            to { opacity: 0; transform: scale(0.8) translateY(-20px); }
-        }
-        .buffer-enter { animation: slideInRight 0.3s ease-out forwards; }
-        .buffer-exit { animation: popOut 0.3s ease-in forwards; }
-
-        /* Invisible Characters */
-        .invis-char { color: #cbd5e1; font-weight: bold; display: inline-block; user-select: none; }
-        .char-newline::before { content: "↵"; }
-        .char-space::before { content: "·"; }
-
-        /* Custom Scrollbar */
+        /* Scrollbars */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Dark Scrollbar for left panel */
+        .dark-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+        .dark-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Invisible Char Visuals */
+        .char-nl::before { content: "↵"; color: #94a3b8; margin-right: 2px; }
+        .char-sp::before { content: "·"; color: #cbd5e1; font-weight: bold; }
+        
+        /* Syntax Highlighting Colors */
+        .syn-k { color: #c678dd; } /* keyword */
+        .syn-f { color: #61afef; } /* function */
+        .syn-s { color: #98c379; } /* string */
+        .syn-c { color: #7f848e; font-style: italic; } /* comment */
+        .syn-v { color: #e06c75; } /* variable */
+
+        /* Merge Animation Helpers */
+        .merge-item-pop { animation: popOut 0.3s ease-in forwards; }
+        @keyframes popOut {
+            to { opacity: 0; transform: scale(0.8) translateY(-10px); }
+        }
+        .merge-active-border { border-color: #f59e0b !important; background-color: #fffbeb !important; }
+        
+        /* Buffer Item Consume Animation */
+        .buffer-consume { animation: consumeOut 0.2s ease-in forwards; }
+        @keyframes consumeOut {
+            to { opacity: 0; transform: translateY(10px) scale(0.9); }
+        }
     </style>
 </head>
 <body class="bg-slate-50 h-screen flex flex-col overflow-hidden text-slate-800">
 
-    <!-- App Header -->
-    <header class="bg-white border-b border-slate-200 h-14 flex items-center justify-between px-6 flex-shrink-0 z-30 shadow-sm relative">
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 h-14 flex items-center justify-between px-6 flex-shrink-0 z-30 shadow-sm">
         <div class="flex items-center gap-3">
             <div class="bg-blue-600 p-1.5 rounded text-white shadow-sm">
-                <i data-lucide="layers" class="w-5 h-5"></i>
+                <i data-lucide="git-fork" class="w-5 h-5"></i>
             </div>
-            <h1 class="text-lg font-bold text-slate-800 tracking-tight">LangChain <span class="text-slate-400 font-normal">TextSplitter Visualizer</span></h1>
-            <!-- GitHub Repo stars -->
-            <a
-              href="https://github.com/vsme/ai-viz"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <img
-                src="//img.shields.io/github/stars/vsme/ai-viz"
-                alt="GitHub Repo stars"
-              />
-            </a>
+            <div>
+                <h1 class="text-lg font-bold text-slate-800 leading-none">RecursiveCharacterTextSplitter</h1>
+                <div class="text-[10px] text-slate-400 font-mono mt-0.5">Official Logic Simulation</div>
+            </div>
         </div>
-        <div class="flex items-center gap-3">
-            <div class="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded">RecursiveCharacterTextSplitter</div>
-            <div class="h-4 w-px bg-slate-300 mx-1"></div>
-            <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse" id="status-dot"></span>
-                <span class="text-sm font-medium text-slate-600" id="status-text">Ready</span>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                <span class="w-2 h-2 rounded-full bg-slate-400" id="status-dot"></span>
+                <span id="status-text">Idle</span>
             </div>
         </div>
     </header>
 
-    <!-- Main Layout -->
     <div class="flex-1 flex overflow-hidden">
         
-        <!-- LEFT: Code & Log -->
-        <aside class="w-[400px] bg-[#1e1e1e] flex flex-col border-r border-slate-800 text-slate-300 shadow-xl z-20 flex-shrink-0">
-            <!-- Code Panel -->
-            <div class="flex-1 flex flex-col min-h-0 border-b border-black">
-                <div class="p-2 bg-[#252526] text-[10px] font-bold text-slate-400 uppercase tracking-wider flex justify-between items-center border-b border-[#333]">
-                    <span>Algorithm Logic (Python)</span>
-                    <i data-lucide="code-2" class="w-3 h-3"></i>
-                </div>
-                <div class="flex-1 overflow-auto py-3 code-font text-[11px]" id="code-container">
-                    <!-- Phase 1: Recursive Split -->
-                    <div class="px-4 text-slate-500 font-bold mb-1"># 1. RECURSIVE SPLITTING</div>
-                    <div id="line-def" class="code-line"><span class="text-purple-400">def</span> <span class="text-yellow-300">recursive_split</span>(text, seps):</div>
-                    <div id="line-base-check" class="code-line pl-4"><span class="text-green-400">if not</span> seps:</div>
-                    
-                    <div id="line-base-ret" class="code-line pl-8 bg-blue-900/20 border-l-2 border-blue-500 text-blue-100"><span class="text-slate-400"># Force Split (with overlap logic)</span></div>
-                    <div id="line-base-ret-2" class="code-line pl-8 bg-blue-900/20 border-l-2 border-blue-500 text-blue-100"><span class="text-purple-400">return</span> [text[i : i + size]...]</div>
-                    
-                    <div id="line-sep" class="code-line pl-4">sep = seps[0]</div>
-                    <div id="line-split" class="code-line pl-4">splits = text.<span class="text-yellow-300">split</span>(sep)</div>
-                    <div id="line-reattach" class="code-line pl-4"><span class="text-slate-500"># Re-attach separators</span></div>
-                    <div id="line-reattach-logic" class="code-line pl-4">splits = [s+sep <span class="text-purple-400">if</span> i &lt; len-1 <span class="text-purple-400">else</span> s ...]</div>
-                    
-                    <div id="line-loop" class="code-line pl-4"><span class="text-purple-400">for</span> split <span class="text-purple-400">in</span> splits:</div>
-                    <div id="line-check-len" class="code-line pl-8"><span class="text-green-400">if</span> len(split) > chunk_size:</div>
-                    <div id="line-recurse-call" class="code-line pl-12">res.extend(<span class="text-yellow-300">recurse</span>(split, seps[1:]))</div>
-                    <div id="line-else" class="code-line pl-8"><span class="text-green-400">else</span>:</div>
-                    <div id="line-append" class="code-line pl-12">res.append(split)</div>
-                    
-                    <!-- Phase 2: Filtering -->
-                    <div class="px-4 text-slate-500 font-bold mb-1 mt-3"># 2. FILTERING</div>
-                    <div id="line-strip" class="code-line border-l-2 border-green-600 bg-green-900/10 text-green-100">final_splits = [s <span class="text-purple-400">for</span> s <span class="text-purple-400">in</span> res <span class="text-purple-400">if</span> s.strip()]</div>
-
-                    <!-- Phase 3: Merging -->
-                    <div class="px-4 text-slate-500 font-bold mb-1 mt-3"># 3. MERGING (BUFFER)</div>
-                    <div id="line-merge-init" class="code-line">buffer = [], current_len = 0</div>
-                    <div id="line-merge-loop" class="code-line"><span class="text-purple-400">for</span> split <span class="text-purple-400">in</span> final_splits:</div>
-                    <div id="line-merge-check" class="code-line pl-4"><span class="text-green-400">if</span> current_len + len(split) > size:</div>
-                    
-                    <div id="line-redundant-check" class="code-line pl-8 text-amber-200 opacity-80"><span class="text-gray-500"># Optim: Skip if redundant</span></div>
-                    <div id="line-emit" class="code-line pl-8"><span class="text-blue-400">if</span> len > overlap: <span class="text-blue-400">yield</span> buffer</div>
-                    
-                    <div id="line-overlap-loop" class="code-line pl-8"><span class="text-purple-400">while</span> current_len > overlap:</div>
-                    <div id="line-overlap-pop" class="code-line pl-12">buffer.pop(0) <span class="text-slate-500"># Shrink from start</span></div>
-                    
-                    <div id="line-buffer-add" class="code-line pl-4">buffer.append(split)</div>
-                </div>
+        <!-- LEFT: Algorithm & Log -->
+        <aside class="w-[450px] bg-[#1e1e1e] flex flex-col border-r border-slate-800 flex-shrink-0 z-20 text-slate-300">
+            <!-- Code Header -->
+            <div class="px-3 py-2 bg-[#252526] border-b border-black flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span>Algorithm (Python Logic)</span>
+                <i data-lucide="code-2" class="w-3 h-3"></i>
             </div>
             
-            <!-- Console Log -->
-            <div class="h-1/3 bg-[#0d0d0d] flex flex-col">
-                <div class="p-2 bg-[#1a1a1a] text-[10px] font-bold text-slate-500 uppercase tracking-wider flex justify-between items-center border-b border-[#333]">
-                    <span>Execution Log</span>
-                    <i data-lucide="terminal" class="w-3 h-3"></i>
-                </div>
-                <div id="console-log" class="flex-1 overflow-auto p-3 font-mono text-[10px] leading-relaxed text-slate-400 custom-scrollbar">
-                    <div class="text-slate-600 italic">Ready. Click "Run" to start.</div>
-                </div>
+            <!-- Code Body -->
+            <div id="code-container" class="flex-1 overflow-auto py-2 font-mono text-[11px] leading-5 custom-scrollbar dark-scrollbar">
+                <div id="ln-def" class="code-line"><span class="syn-k">def</span> <span class="syn-f">_split_text</span>(text, separators):</div>
+                <div id="ln-sep" class="code-line pl-4"><span class="syn-c"># 1. Choose Separator</span></div>
+                <div id="ln-sep-logic" class="code-line pl-4">separator = <span class="syn-f">get_separator</span>(text, separators)</div>
+                <div class="code-line">&nbsp;</div>
+                <div id="ln-split" class="code-line pl-4"><span class="syn-c"># 2. Split Text</span></div>
+                <div id="ln-split-call" class="code-line pl-4">splits = text.<span class="syn-f">split</span>(separator)</div>
+                <div id="ln-init-buf" class="code-line pl-4">_good_splits = []</div>
+                <div class="code-line">&nbsp;</div>
+                <div id="ln-loop" class="code-line pl-4"><span class="syn-c"># 3. Iterate Splits</span></div>
+                <div id="ln-loop-for" class="code-line pl-4"><span class="syn-k">for</span> s <span class="syn-k">in</span> splits:</div>
+                <div id="ln-check-len" class="code-line pl-8"><span class="syn-k">if</span> <span class="syn-f">len</span>(s) < chunk_size:</div>
+                <div id="ln-add-buf" class="code-line pl-12">_good_splits.<span class="syn-f">append</span>(s)</div>
+                <div id="ln-else" class="code-line pl-8"><span class="syn-k">else</span>:</div>
+                <div class="code-line pl-12"><span class="syn-c"># If buffer has items, we MUST flush them</span></div>
+                <div class="code-line pl-12"><span class="syn-c"># before processing the big chunk 's'</span></div>
+                <div id="ln-check-buf" class="code-line pl-12"><span class="syn-k">if</span> _good_splits:</div>
+                <div id="ln-flush-mid" class="code-line pl-16"><span class="syn-f">merge_splits</span>(_good_splits, separator)</div>
+                <div id="ln-clear-buf" class="code-line pl-16">_good_splits = []</div>
+                <div class="code-line">&nbsp;</div>
+                <div id="ln-recurse-check" class="code-line pl-12"><span class="syn-c"># 4. Recursion on big chunk</span></div>
+                <div id="ln-recurse-if" class="code-line pl-12"><span class="syn-k">if</span> new_separators:</div>
+                <div id="ln-recurse-call" class="code-line pl-16"><span class="syn-f">_split_text</span>(s, new_separators)</div>
+                <div id="ln-force-else" class="code-line pl-12"><span class="syn-k">else</span>:</div>
+                <div id="ln-force-emit" class="code-line pl-16"><span class="syn-f">force_emit</span>(s)</div>
+                <div class="code-line">&nbsp;</div>
+                <div id="ln-final-check" class="code-line pl-4"><span class="syn-c"># 5. Flush Remaining</span></div>
+                <div id="ln-final-if" class="code-line pl-4"><span class="syn-k">if</span> _good_splits:</div>
+                <div id="ln-final-flush" class="code-line pl-8"><span class="syn-f">merge_splits</span>(_good_splits, separator)</div>
+                
+                <div class="code-line">&nbsp;</div>
+                <div class="border-t border-slate-700 my-1 mx-2"></div>
+                <div class="code-line">&nbsp;</div>
+
+                <!-- Merge Splits Visualization -->
+                <div id="ln-merge-def" class="code-line"><span class="syn-k">def</span> <span class="syn-f">merge_splits</span>(splits, separator):</div>
+                <div id="ln-merge-init" class="code-line pl-4">current_doc, total = [], 0</div>
+                <div id="ln-merge-loop" class="code-line pl-4"><span class="syn-k">for</span> d <span class="syn-k">in</span> splits:</div>
+                <div id="ln-merge-check" class="code-line pl-8"><span class="syn-k">if</span> total + <span class="syn-f">len</span>(d) > chunk_size:</div>
+                <div id="ln-merge-emit" class="code-line pl-12"><span class="syn-f">emit_chunk</span>(current_doc)</div>
+                <div id="ln-merge-overlap" class="code-line pl-12"><span class="syn-k">while</span> total > overlap: </div>
+                <div class="code-line pl-16">current_doc.<span class="syn-f">pop</span>(0)</div>
+                <div id="ln-merge-append" class="code-line pl-8">current_doc.<span class="syn-f">append</span>(d)</div>
+                <div id="ln-merge-final" class="code-line pl-4"><span class="syn-f">emit_chunk</span>(current_doc)</div>
+            </div>
+
+            <!-- Log Header -->
+            <div class="px-3 py-2 bg-[#252526] border-y border-black flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-auto">
+                <span>Execution Log</span>
+                <span id="step-counter" class="font-mono">Step: 0</span>
+            </div>
+            <!-- Log Body -->
+            <div id="console-log" class="h-48 overflow-auto p-3 font-mono text-[10px] space-y-1 custom-scrollbar dark-scrollbar bg-[#1e1e1e]">
+                <div class="text-slate-500 italic">Ready to split...</div>
             </div>
         </aside>
 
-        <!-- CENTER: Visualization Stage -->
-        <main class="flex-1 flex flex-col overflow-hidden bg-slate-50 relative shadow-inner">
-
-            <!-- Visual Tree Container -->
-            <div class="relative flex-1 overflow-auto p-8 custom-scrollbar" id="visualization-container">
-                <div id="tree-root" class="min-w-fit pb-32"></div>
-            </div>
+        <!-- CENTER: Visualization -->
+        <main class="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
             
-            <!-- Legend Overlay -->
-            <div class="absolute left-4 bottom-[calc(1.5rem+13rem)] flex flex-col gap-2 text-[10px] font-medium z-10 bg-white/90 backdrop-blur p-3 rounded-lg border border-slate-200 shadow-sm select-none pointer-events-none">
-                <div class="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Split Phase</div>
-                <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-yellow-400"></div>Processing</div>
-                <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-yellow-100 border border-yellow-400"></div>Split (Used Separator)</div>
-                <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-blue-100 border border-blue-500"></div>FORCE (Hard Cut)</div>
-                <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-green-500"></div>Accepted Leaf</div>
-                
-                <div class="mt-2 font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Merge Phase</div>
-                <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full border-2 border-amber-500 bg-amber-50"></div>Active in Buffer</div>
+            <!-- Visualization Container -->
+            <div class="flex-1 overflow-auto p-6 custom-scrollbar" id="tree-container">
+                <div id="tree-root" class="pb-20"></div>
             </div>
 
-            <!-- Bottom Panel: Merging Buffer -->
-            <div class="bg-white border-t border-slate-200 h-52 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
-                <!-- Buffer Header -->
-                <div class="h-9 bg-slate-50 border-b border-slate-100 flex items-center justify-between px-4 text-xs select-none">
-                    <div class="flex items-center gap-6">
-                        <span class="font-bold text-slate-600 uppercase flex items-center gap-2">
-                            <i data-lucide="container" class="w-3.5 h-3.5 text-slate-400"></i> 
-                            Merge Buffer
+            <!-- Bottom Panel: _good_splits Buffer & Final Output -->
+            <div class="h-[420px] bg-white border-t border-slate-200 flex flex-col shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.1)] z-20 transition-all">
+                
+                <!-- Buffer Section (Fixed height) -->
+                <div class="h-32 border-b border-slate-100 flex flex-col flex-shrink-0">
+                    <div class="px-4 py-1.5 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="layers" class="w-3 h-3"></i> _good_splits (Input Buffer)
                         </span>
-                        <div class="flex items-center gap-3 text-[11px] bg-white border border-slate-200 rounded px-2 py-1">
-                            <span class="text-slate-400">Size:</span>
-                            <span id="buffer-size" class="font-mono font-bold text-blue-600">0</span>
-                            <span class="text-slate-300">/</span>
-                            <span id="target-size" class="font-mono text-slate-600 font-bold">50</span>
-                            <span class="text-[9px] text-slate-400 ml-1 uppercase">Limit</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-[11px]">
-                            <span class="text-slate-400">Overlap ></span>
-                            <span id="overlap-size" class="font-mono text-amber-600 font-bold bg-amber-50 px-1.5 rounded border border-amber-100">10</span>
-                        </div>
                     </div>
-                    <span class="font-bold text-slate-600 uppercase flex items-center gap-2">
-                        <i data-lucide="package-check" class="w-3.5 h-3.5 text-slate-400"></i> 
-                        Final Chunks
-                    </span>
+                    <div id="buffer-area" class="flex-1 p-3 flex flex-wrap gap-x-2 overflow-x-auto custom-scrollbar items-start bg-slate-50/50">
+                        <div id="buffer-placeholder" class="text-xs text-slate-300 italic px-2">Buffer is empty</div>
+                    </div>
                 </div>
 
-                <!-- Buffer & Results Content -->
-                <div class="flex-1 flex overflow-hidden">
-                    <!-- Active Buffer Area -->
-                    <div class="w-[340px] border-r border-slate-200 bg-slate-50/30 relative flex flex-col p-3">
-                        
-                        <!-- Limit Indicator Line -->
-                        <div class="absolute top-0 bottom-0 right-0 w-1 bg-slate-200/50 z-0"></div>
-                        <div class="absolute bottom-2 right-2 text-[9px] text-slate-300 font-bold uppercase rotate-180" style="writing-mode: vertical-rl;">Max Size</div>
-
-                        <div id="buffer-container" class="flex-1 flex flex-wrap content-start gap-1.5 overflow-y-auto custom-scrollbar z-10 pr-2">
-                            <div class="text-slate-400 text-xs italic w-full text-center mt-10" id="buffer-placeholder">Waiting for merge phase...</div>
-                        </div>
-
-                        <!-- Overlap Zone Visual -->
-                        <div id="overlap-indicator" class="mt-2 h-6 border-t border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-[9px] text-amber-700 font-medium opacity-0 transition-opacity">
-                            Overlap Logic Active (Popping...)
+                <!-- Merge Sandbox (New Visualization) -->
+                <div class="h-32 border-b border-slate-100 flex flex-col flex-shrink-0 bg-amber-50/30">
+                    <div class="px-4 py-1.5 border-b border-slate-100 flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="git-merge" class="w-3 h-3"></i> Merge Process (Accumulator)
+                        </span>
+                        <div class="flex items-center gap-2">
+                            <span id="merge-total" class="text-[10px] font-mono bg-amber-100 text-amber-700 px-1.5 rounded border border-amber-200">Length: 0</span>
                         </div>
                     </div>
+                    <div id="merge-area" class="flex-1 p-3 flex flex-wrap gap-x-2 overflow-x-auto custom-scrollbar items-start">
+                        <div id="merge-placeholder" class="text-xs text-slate-300 italic px-2 w-full text-center">Waiting for merge_splits()...</div>
+                    </div>
+                </div>
 
-                    <!-- Result List -->
-                    <div class="flex-1 p-4 bg-white overflow-x-auto custom-scrollbar flex items-center gap-4" id="final-chunks-container">
-                        <!-- Chunks appear here -->
+                <!-- Final Chunks Section (Takes remaining space) -->
+                <div class="flex-1 flex flex-col min-h-0 bg-white">
+                    <div class="px-4 py-1.5 border-b border-slate-100 flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="package-check" class="w-3 h-3"></i> Final Chunks
+                        </span>
+                        <span id="chunk-count" class="text-[10px] font-mono bg-blue-100 text-blue-700 px-1.5 rounded">0 chunks</span>
+                    </div>
+                    <div id="final-chunks-area" class="flex-1 p-4 flex gap-4 overflow-x-auto custom-scrollbar items-start content-start">
+                        <!-- Final chunks go here -->
                     </div>
                 </div>
             </div>
         </main>
 
-        <!-- RIGHT: Control Panel -->
-        <aside class="w-[280px] bg-white border-l border-slate-200 flex flex-col z-30 flex-shrink-0">
-            <!-- Controls -->
-            <div class="p-4 border-b border-slate-100 bg-slate-50">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Controls</h2>
-                    <div class="text-[10px] font-mono text-slate-400" id="step-counter">Step: 0</div>
-                </div>
+        <!-- RIGHT: Controls -->
+        <aside class="w-[280px] bg-white border-l border-slate-200 flex flex-col z-30 shadow-xl">
+            <div class="p-5 space-y-5 bg-slate-50 h-full overflow-y-auto custom-scrollbar">
                 
-                <div class="grid grid-cols-1 gap-2 mb-3">
-                    <!-- <button id="btn-start" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded shadow-sm flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wide transition-all active:scale-95">
-                        <i data-lucide="play" class="w-3 h-3 fill-current"></i> Run
-                    </button> -->
-                    <button id="btn-reset" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded shadow-sm flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wide transition-all active:scale-95">
+                <!-- Text Input -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Input Text</label>
+                        <button id="btn-load-sample" class="text-[10px] text-blue-600 hover:underline cursor-pointer">Load Sample</button>
+                    </div>
+                    <textarea id="input-text" class="w-full h-32 p-2  custom-scrollbar border border-slate-300 rounded text-xs code-font resize-none focus:ring-2 focus:ring-blue-500 outline-none" spellcheck="false"></textarea>
+                </div>
+
+                <!-- Sliders -->
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-[10px] font-bold text-slate-500">Chunk Size</label>
+                            <span id="val-size" class="text-[10px] font-mono font-bold text-blue-600">100</span>
+                        </div>
+                        <input type="range" id="range-size" min="10" max="500" value="100" class="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    </div>
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-[10px] font-bold text-slate-500">Overlap</label>
+                            <span id="val-overlap" class="text-[10px] font-mono font-bold text-amber-600">20</span>
+                        </div>
+                        <input type="range" id="range-overlap" min="0" max="100" value="20" class="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    </div>
+                </div>
+
+                <!-- Playback Controls -->
+                <div class="grid grid-cols-2 gap-2 pt-2">
+                    <button id="btn-reset" class="col-span-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 py-1.5 rounded flex justify-center items-center gap-2 text-xs font-bold transition-colors">
                         <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset
                     </button>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2">
-                    <button id="btn-prev" disabled class="px-2 py-1.5 bg-white border border-slate-300 text-slate-600 rounded text-xs font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                        &larr; Prev
+                    <button id="btn-step" class="bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200 py-1.5 rounded flex justify-center items-center gap-2 text-xs font-bold transition-colors">
+                        <i data-lucide="step-forward" class="w-3 h-3"></i> Step
                     </button>
-                    <button id="btn-next" disabled class="px-2 py-1.5 bg-white border border-slate-300 text-slate-600 rounded text-xs font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                        Next &rarr;
+                    <button id="btn-play" class="bg-blue-600 hover:bg-blue-700 text-white border border-blue-600 py-1.5 rounded flex justify-center items-center gap-2 text-xs font-bold shadow-sm transition-all active:scale-95">
+                        <i data-lucide="play" class="w-3 h-3 fill-current"></i> Play
                     </button>
                 </div>
-                
-                <div class="mt-3 flex items-center gap-2 justify-center">
-                    <label for="auto-play" class="text-xs text-slate-500 font-medium cursor-pointer select-none">Auto Play</label>
-                    <input type="checkbox" id="auto-play" class="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-4 h-4">
-                </div>
-            </div>
-
-            <!-- Configuration -->
-            <div class="p-5 flex-1 overflow-y-auto custom-scrollbar space-y-6">
-                
-                <div class="space-y-4">
-                    <!-- Chunk Size -->
-                    <div>
-                        <div class="flex justify-between mb-1.5">
-                            <label class="text-xs font-bold text-slate-600">Chunk Size</label>
-                            <span id="chunk-size-val" class="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 rounded border border-blue-100 font-bold">50</span>
-                        </div>
-                        <input type="range" id="chunk-size-input" min="20" max="200" value="50" step="5" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
-                    </div>
-
-                    <!-- Overlap -->
-                    <div>
-                        <div class="flex justify-between mb-1.5">
-                            <label class="text-xs font-bold text-slate-600">Chunk Overlap</label>
-                            <span id="chunk-overlap-val" class="text-xs font-mono bg-amber-50 text-amber-700 px-1.5 rounded border border-amber-100 font-bold">10</span>
-                        </div>
-                        <input type="range" id="chunk-overlap-input" min="0" max="50" value="10" step="5" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
-                            Retains characters from previous chunk context. Must be &lt; Chunk Size.
-                        </p>
-                    </div>
-                </div>
-
-                <hr class="border-slate-100">
-
-                <!-- Input -->
-                <div>
-                    <div class="flex flex-col justify-between mb-2">
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Input Text</label>
-                        <div class="flex flex-wrap gap-1 text-[10px] text-slate-400">
-                            <span class="bg-slate-100 px-1.5 py-0.5 rounded">\n\n</span>
-                            <span class="bg-slate-100 px-1.5 py-0.5 rounded">\n</span>
-                            <span class="bg-slate-100 px-1.5 py-0.5 rounded">.</span>
-                            <span class="bg-slate-100 px-1.5 py-0.5 rounded">。</span>
-                            <span class="bg-slate-100 px-1.5 py-0.5 rounded">,</span>
-                            <span class="bg-slate-100 px-1.5 py-0.5 rounded">，</span>
-                            <span class="bg-slate-100 px-1.5 py-0.5 rounded">SPC</span>
-                        </div>
-                    </div>
-                    <textarea id="input-text" class="w-full h-40 p-3 border border-slate-300 rounded-md text-xs code-font resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none leading-relaxed text-slate-600 bg-slate-50 transition-shadow" spellcheck="false"></textarea>
-                </div>
-
             </div>
         </aside>
 
     </div>
 
-    <script>
-        // --- CONFIGURATION ---
-        const DEFAULT_TEXT = `This is paragraph one. It is about forty-six characters long.\n\nThis is paragraph two. It is also forty-six characters long.`;
-        
-        // LangChain Default Separators
-        const SEPARATORS = ["\n\n", "\n", ".", "。", ",", "，", " "]; 
+    <!-- Templates -->
+    <template id="node-template">
+        <div class="node-item mb-2">
+            <div class="node-content flex items-start gap-2 group">
+                <!-- Connector -->
+                <div class="mt-2 w-2 h-2 rounded-full border border-slate-300 bg-white z-10 flex-shrink-0 transition-colors duration-200"></div>
+                
+                <!-- Card -->
+                <div class="node-card border border-slate-200 bg-white rounded p-2 shadow-sm min-w-[200px] max-w-[90%] transition-all duration-300">
+                    <div class="flex justify-between items-center mb-1 pb-1 border-b border-slate-100">
+                        <div class="flex items-center gap-2">
+                            <span class="separator-badge text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">ROOT</span>
+                            <span class="length-badge text-[9px] font-mono text-slate-400">0 chars</span>
+                        </div>
+                        <span class="status-badge text-[9px] font-bold px-1 rounded hidden"></span>
+                    </div>
+                    <div class="text-content font-mono text-[11px] leading-relaxed text-slate-700 break-words whitespace-pre-wrap bg-slate-50 p-1 rounded border border-slate-100/50"></div>
+                </div>
+            </div>
+            <!-- Children Container -->
+            <div class="tree-children hidden"></div>
+        </div>
+    </template>
 
-        // --- STATE ---
-        let appState = {
-            chunkSize: 50,
-            chunkOverlap: 10,
-            inputText: DEFAULT_TEXT,
-            trace: [],       
-            currentStep: -1, 
-            nodes: {},       
-            autoPlayInterval: null
+    <script>
+        // --- CONSTANTS & CONFIG ---
+        const SAMPLE_TEXT = `Artificial Intelligence (AI) is intelligence demonstrated by machines, as opposed to intelligence of humans and other animals. 
+
+Example tasks in which this is done include speech recognition, computer vision, translation between (natural) languages, as well as other mappings of inputs.
+
+As machines become increasingly capable, tasks considered to require "intelligence" are often removed from the definition of AI, a phenomenon known as the AI effect.`;
+
+        const SEPARATORS = ["\n\n", "\n", " ", ""]; 
+
+        // --- STATE MANAGEMENT ---
+        let state = {
+            text: "",
+            chunkSize: 100,
+            overlap: 20,
+            trace: [],
+            currentStep: -1,
+            isPlaying: false,
+            timer: null,
+            nodeMap: new Map() // ID -> DOM Element
         };
 
         // --- DOM ELEMENTS ---
-        const elInputText = document.getElementById('input-text');
-        const elChunkSizeInput = document.getElementById('chunk-size-input');
-        const elChunkSizeVal = document.getElementById('chunk-size-val');
-        const elChunkOverlapInput = document.getElementById('chunk-overlap-input');
-        const elChunkOverlapVal = document.getElementById('chunk-overlap-val');
-        const elTreeRoot = document.getElementById('tree-root');
-        const elBufferContainer = document.getElementById('buffer-container');
-        const elFinalChunksContainer = document.getElementById('final-chunks-container');
-        const elConsoleLog = document.getElementById('console-log');
-        const elStepCounter = document.getElementById('step-counter');
-        const elStatusText = document.getElementById('status-text');
-        const elStatusDot = document.getElementById('status-dot');
-        const elBufferSize = document.getElementById('buffer-size');
-        const elTargetSize = document.getElementById('target-size');
-        const elOverlapSize = document.getElementById('overlap-size');
-        const elBufferPlaceholder = document.getElementById('buffer-placeholder');
-        const elOverlapIndicator = document.getElementById('overlap-indicator');
-        
-        // const btnStart = document.getElementById('btn-start');
-        const btnReset = document.getElementById('btn-reset');
-        const btnPrev = document.getElementById('btn-prev');
-        const btnNext = document.getElementById('btn-next');
-        const chkAutoPlay = document.getElementById('auto-play');
+        const els = {
+            inputText: document.getElementById('input-text'),
+            rangeSize: document.getElementById('range-size'),
+            valSize: document.getElementById('val-size'),
+            rangeOverlap: document.getElementById('range-overlap'),
+            valOverlap: document.getElementById('val-overlap'),
+            treeRoot: document.getElementById('tree-root'),
+            bufferArea: document.getElementById('buffer-area'),
+            bufferPlaceholder: document.getElementById('buffer-placeholder'),
+            mergeArea: document.getElementById('merge-area'),
+            mergeTotal: document.getElementById('merge-total'),
+            mergePlaceholder: document.getElementById('merge-placeholder'),
+            finalChunksArea: document.getElementById('final-chunks-area'),
+            console: document.getElementById('console-log'),
+            stepCounter: document.getElementById('step-counter'),
+            statusDot: document.getElementById('status-dot'),
+            statusText: document.getElementById('status-text'),
+            chunkCount: document.getElementById('chunk-count'),
+            btnPlay: document.getElementById('btn-play'),
+            btnStep: document.getElementById('btn-step'),
+            btnReset: document.getElementById('btn-reset'),
+            btnLoad: document.getElementById('btn-load-sample'),
+            codeContainer: document.getElementById('code-container')
+        };
 
         // --- HELPERS ---
-        function visualizeWhitespace(text) {
-            if (!text) return "";
-            
-            // 1. Escape HTML entities first to protect raw strings like '<'
-            const safeText = text
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-
-            // 2. Safely replace whitespace with visual spans
-            return safeText.replace(/(\n| )/g, function(match) {
-                return match === "\n" 
-                    ? '<span class="invis-char char-newline"></span><br>' 
-                    : '<span class="invis-char char-space"></span> ';
-            });
+        function formatTextForDisplay(text) {
+            if (!text) return '';
+            let safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            // Visualize spaces and newlines
+            safeText = safeText.replace(/\n/g, '<span class="char-nl"></span><br>');
+            safeText = safeText.replace(/ /g, '<span class="char-sp"></span>');
+            return safeText;
         }
 
-        function log(msg, type="info") {
-            const div = document.createElement('div');
-            let borderClass = "border-slate-700";
-            let textClass = "text-slate-400";
-            
-            if (type === "error") { borderClass = "border-red-500"; textClass = "text-red-400"; }
-            if (type === "success") { borderClass = "border-green-500"; textClass = "text-green-400"; }
-            if (type === "bold") { textClass = "text-blue-300 font-bold"; }
+        // --- LOGIC SIMULATION (Trace Generator) ---
 
-            div.className = `mb-1 border-l-2 pl-2 ${borderClass} ${textClass} leading-snug`;
-            div.innerHTML = `<span class="text-slate-600 text-[9px] mr-1 opacity-50">[${appState.currentStep+1}]</span> ${msg}`;
-            elConsoleLog.appendChild(div);
-            elConsoleLog.scrollTop = elConsoleLog.scrollHeight;
-        }
+        let traceIdCounter = 0;
+        const nextId = () => `node-${traceIdCounter++}`;
 
-        // --- TRACER LOGIC (The Brain) ---
-        
         function generateTrace(text, chunkSize, chunkOverlap) {
-            let trace = [];
-            let nodeIdCounter = 0;
-            let nodes = {};
-
-            const nextId = () => `node-${nodeIdCounter++}`;
-
-            function record(action, nodeId, codeLineId, payload = {}) {
-                trace.push({
-                    stepIndex: trace.length,
-                    action,     
-                    nodeId,
-                    codeLineId,
-                    payload
-                });
+            const trace = [];
+            
+            function record(type, payload) {
+                trace.push({ type, payload });
             }
 
-            // PHASE 1: Recursive Split
-            function recursiveSplit(txt, seps, parentId = null) {
+            // Mock of LangChain _merge_splits
+            function mergeSplits(splits, separator, reason) {
+                record('HIGHLIGHT_CODE', { line: 'ln-merge-def' });
+                record('HIGHLIGHT_CODE', { line: 'ln-merge-init' });
+                record('MERGE_START', {}); // Reset/Show merge area
+                
+                record('LOG', { msg: `Merging ${splits.length} items (${reason})...`, color: reason === 'flush_mid' ? 'text-amber-300' : 'text-blue-300' });
+                
+                let currentDoc = [];
+                let total = 0;
+                const sepLen = separator ? separator.length : 0;
+
+                for (let i = 0; i < splits.length; i++) {
+                    const d = splits[i];
+                    record('HIGHLIGHT_CODE', { line: 'ln-merge-loop' });
+                    const len = d.length;
+                    
+                    record('HIGHLIGHT_CODE', { line: 'ln-merge-check' });
+                    // Check logic
+                    if (total + len + (currentDoc.length > 0 ? sepLen : 0) > chunkSize) {
+                        if (currentDoc.length > 0) {
+                            record('HIGHLIGHT_CODE', { line: 'ln-merge-emit' });
+                            const docStr = currentDoc.join(separator);
+                            record('EMIT_CHUNK', { text: docStr, len: docStr.length });
+                            
+                            // Visualize Popping
+                            while (total > chunkOverlap || (total + len + sepLen > chunkSize && total > 0)) {
+                                record('HIGHLIGHT_CODE', { line: 'ln-merge-overlap' });
+                                const popped = currentDoc.shift();
+                                const popLen = popped.length + sepLen;
+                                total -= popLen;
+                                // We simulate the visualization update
+                                record('MERGE_POP', { text: popped, newTotal: total });
+                            }
+                        }
+                    }
+                    
+                    record('HIGHLIGHT_CODE', { line: 'ln-merge-append' });
+                    currentDoc.push(d);
+                    total += len + (currentDoc.length > 1 ? sepLen : 0);
+                    // Add index i to payload so UI can target correct buffer item
+                    record('MERGE_ADD', { text: d, len: len, newTotal: total, isLast: i === splits.length - 1 });
+                }
+                
+                record('HIGHLIGHT_CODE', { line: 'ln-merge-final' });
+                if (currentDoc.length > 0) {
+                    const docStr = currentDoc.join(separator);
+                    record('EMIT_CHUNK', { text: docStr, len: docStr.length });
+                }
+                
+                record('MERGE_END', {});
+            }
+
+            // The Core Recursive Logic
+            function _split_text(text, separators, parentId) {
+                record('HIGHLIGHT_CODE', { line: 'ln-def' });
                 const myId = nextId();
-                nodes[myId] = { id: myId, text: txt, parentId, children: [], status: 'pending' };
-                record('CREATE', myId, 'line-def', { text: txt, parentId });
+                record('CREATE_NODE', { id: myId, parentId, text, levelSep: separators[0] || 'char' });
+                record('HIGHLIGHT_NODE', { id: myId, type: 'active' });
+
+                // 1. Find Separator
+                record('HIGHLIGHT_CODE', { line: 'ln-sep-logic' });
+                let separator = separators[separators.length - 1];
+                let newSeparators = [];
                 
-                record('FOCUS', myId, 'line-base-check');
-                // Base case: No separators left -> Force split
-                if (seps.length === 0) {
-                    record('STATUS_CHANGE', myId, 'line-base-ret', { status: 'forced' });
-                    record('LOG', null, null, { msg: "FORCE: No separators left. Hard cutting text with stride.", type: 'error' });
-                    
-                    let leaves = [];
-                    const stride = chunkSize - chunkOverlap;
-                    
-                    for (let i = 0; i < txt.length; i += stride) {
-                        const chunkTxt = txt.slice(i, i + chunkSize);
-                        
-                        if (chunkTxt.length > 0) {
-                            const childId = nextId();
-                            nodes[childId] = { id: childId, text: chunkTxt, parentId: myId, children: [], status: 'forced' };
-                            record('CREATE', childId, 'line-base-ret-2', { text: chunkTxt, parentId: myId, isForced: true });
-                            leaves.push(nodes[childId]);
-                            if (i + chunkSize >= txt.length) break;
-                        }
+                for (let i = 0; i < separators.length; i++) {
+                    const s = separators[i];
+                    if (s === "") {
+                        separator = s;
+                        break;
                     }
-                    return leaves;
+                    if (text.includes(s)) {
+                        separator = s;
+                        newSeparators = separators.slice(i + 1);
+                        break;
+                    }
                 }
 
-                // Split Attempt
-                const sep = seps[0];
-                record('FOCUS', myId, 'line-sep', { separator: sep });
-                record('FOCUS', myId, 'line-split');
+                // 2. Split
+                record('HIGHLIGHT_CODE', { line: 'ln-split-call' });
+                const displaySep = separator === '\n\n' ? '\\n\\n' : separator === '\n' ? '\\n' : separator === ' ' ? 'SPC' : 'char';
+                record('LOG', { msg: `Splitting by [${displaySep}]` });
                 
-                let rawSplits = txt.split(sep);
+                let splits = text.split(separator);
                 
-                // FIX: Separator Re-attachment Logic
-                record('FOCUS', myId, 'line-reattach');
-                let parts = [];
-                for (let i = 0; i < rawSplits.length; i++) {
-                    let p = rawSplits[i];
-                    if (i < rawSplits.length - 1) {
-                        p += sep;
-                    }
-                    if (p.length > 0) parts.push(p);
-                }
-                
-                record('LOG', myId, 'line-reattach-logic', { 
-                    msg: `Splitting by "${sep.replace(/\n/g,'\\n')}". Result: ${parts.length} parts.` 
-                });
+                record('HIGHLIGHT_CODE', { line: 'ln-init-buf' });
+                let goodSplits = [];
 
-                record('FOCUS', myId, 'line-loop');
-                let leaves = [];
-                
-                for (let part of parts) {
-                    record('FOCUS', myId, 'line-check-len', { currentPartLength: part.length });
+                // 3. Iterate
+                record('HIGHLIGHT_CODE', { line: 'ln-loop-for' });
+                for (let s of splits) {
+                    if(!s) continue;
                     
-                    if (part.length > chunkSize) {
-                        record('LOG', myId, 'line-recurse-call', { msg: `Part too long (${part.length}). Recursing...`, type: 'error' });
-                        // Update parent status to SPLIT here, pass separator
-                        record('STATUS_CHANGE', myId, 'line-loop', { status: 'split', separator: sep }); 
-                        
-                        const childLeaves = recursiveSplit(part, seps.slice(1), myId);
-                        leaves.push(...childLeaves);
+                    record('HIGHLIGHT_CODE', { line: 'ln-check-len' });
+                    if (s.length < chunkSize) {
+                        // Good Split -> Buffer
+                        record('HIGHLIGHT_CODE', { line: 'ln-add-buf' });
+                        goodSplits.push(s);
+                        record('ADD_TO_BUFFER', { text: s });
                     } else {
-                        // Fits -> Accepted Leaf
-                        const leafId = nextId();
-                        nodes[leafId] = { id: leafId, text: part, parentId: myId, children: [], status: 'accepted' };
-                        record('CREATE', leafId, 'line-append', { text: part, parentId: myId, status: 'accepted' });
-                        record('STATUS_CHANGE', myId, 'line-else', { status: 'split', separator: sep }); 
-                        leaves.push(nodes[leafId]);
-                    }
-                }
-                return leaves;
-            }
-
-            // Run Phase 1
-            record('LOG', null, null, { msg: "--- PHASE 1: SPLITTING TREE ---", type: 'bold' });
-            const rawLeaves = recursiveSplit(text, SEPARATORS);
-
-            // PHASE 2: Filtering
-            record('LOG', null, 'line-strip', { msg: "--- FILTERING ---", type: 'bold' });
-            const finalLeaves = [];
-            for (let leaf of rawLeaves) {
-                if (leaf.text.trim().length === 0) {
-                    record('IGNORE_NODE', leaf.id, 'line-strip', { msg: `Ignored empty/whitespace node ${leaf.id}` });
-                } else {
-                    finalLeaves.push(leaf);
-                }
-            }
-
-            // PHASE 3: Merging
-            record('LOG', null, 'line-merge-def', { msg: "--- PHASE 2: MERGING & OVERLAP ---", type: 'bold' });
-            
-            let currentDoc = [];
-            let currentLen = 0;
-            
-            record('LOG', null, 'line-merge-init', { msg: `Initializing buffer. Max: ${chunkSize}, Overlap: ${chunkOverlap}` });
-
-            for (let leaf of finalLeaves) {
-                record('FOCUS', leaf.id, 'line-merge-loop'); 
-                record('MERGE_HIGHLIGHT', leaf.id, 'line-merge-loop', { msg: `Merging leaf: "${leaf.text.substring(0,10).replace(/\n/g,'\\n')}..."` });
-                
-                record('FOCUS', null, 'line-merge-check');
-                
-                if (currentLen + leaf.text.length > chunkSize) {
-                    
-                    const shouldEmit = currentLen > chunkOverlap; 
-                    
-                    if (shouldEmit) {
-                        record('LOG', null, 'line-merge-check', { msg: `Buffer limit reached (${currentLen}). Emitting.`, type: 'bold' });
-                        const chunkText = currentDoc.map(l => l.text).join('');
-                        if (chunkText.length > 0) {
-                            record('EMIT_CHUNK', null, 'line-emit', { text: chunkText, len: currentLen });
+                        record('HIGHLIGHT_CODE', { line: 'ln-else' });
+                        // Bad Split (Too Big)
+                        record('HIGHLIGHT_CODE', { line: 'ln-check-buf' });
+                        if (goodSplits.length > 0) {
+                            // Flush buffer first
+                            record('HIGHLIGHT_CODE', { line: 'ln-flush-mid' });
+                            record('FLUSH_BUFFER', { separator });
+                            
+                            // Specific Log for Middle Flush
+                            record('LOG', { msg: `Hit large chunk. Flushing buffer first.`, color: 'text-amber-400' });
+                            mergeSplits(goodSplits, separator, 'flush_mid');
+                            
+                            record('HIGHLIGHT_CODE', { line: 'ln-clear-buf' });
+                            goodSplits = [];
                         }
-                    } else {
-                        record('LOG', null, 'line-redundant-check', { 
-                            msg: `Skipping emit (Subset redundancy).`, 
-                            type: 'success' 
-                        });
-                    }
-                    
-                    record('FOCUS', null, 'line-overlap-loop', { msg: `Adjusting buffer for overlap...` });
-                    
-                    while (currentLen > chunkOverlap && currentDoc.length > 0) {
-                        const removed = currentDoc.shift();
-                        currentLen -= removed.text.length;
-                        record('BUFFER_POP', removed.id, 'line-overlap-pop', { 
-                            removedId: removed.id, 
-                            newLen: currentLen,
-                            msg: `Popped head.` 
-                        });
-                        // Visualizing the edge case: Context Loss
-                        if (currentLen === 0) {
-                             record('LOG', null, 'line-overlap-loop', { 
-                                msg: "⚠️ Context lost: Segment larger than overlap window.", 
-                                type: 'error' 
-                            });
+                        
+                        // Recurse on the big chunk
+                        record('HIGHLIGHT_CODE', { line: 'ln-recurse-if' });
+                        if (newSeparators.length === 0) {
+                            record('HIGHLIGHT_CODE', { line: 'ln-force-else' });
+                            record('HIGHLIGHT_CODE', { line: 'ln-force-emit' });
+                            record('LOG', { msg: `No separators left. Forcing chunk.`, color: 'text-red-400' });
+                            record('EMIT_CHUNK', { text: s, len: s.length });
+                        } else {
+                            record('HIGHLIGHT_CODE', { line: 'ln-recurse-call' });
+                            record('LOG', { msg: `Chunk too big (${s.length}). Recursing...`, color: 'text-amber-300' });
+                            record('HIGHLIGHT_NODE', { id: myId, type: 'recurse' });
+                            _split_text(s, newSeparators, myId);
+                            record('HIGHLIGHT_NODE', { id: myId, type: 'active' }); // Focus back
                         }
                     }
                 }
 
-                currentDoc.push(leaf);
-                currentLen += leaf.text.length;
-                record('BUFFER_ADD', leaf.id, 'line-buffer-add', { 
-                    leafId: leaf.id, 
-                    text: leaf.text, 
-                    newLen: currentLen 
-                });
+                // End of loop flush
+                record('HIGHLIGHT_CODE', { line: 'ln-final-check' });
+                record('HIGHLIGHT_CODE', { line: 'ln-final-if' });
+                if (goodSplits.length > 0) {
+                    record('HIGHLIGHT_CODE', { line: 'ln-final-flush' });
+                    record('FLUSH_BUFFER', { separator });
+                    record('LOG', { msg: `Loop done. Flushing remaining items.`, color: 'text-blue-300' });
+                    mergeSplits(goodSplits, separator, 'flush_final');
+                }
+
+                record('COMPLETE_NODE', { id: myId });
             }
 
-            if (currentDoc.length > 0) {
-                const chunkText = currentDoc.map(l => l.text).join('');
-                record('EMIT_CHUNK', null, 'line-emit', { text: chunkText, len: currentLen });
-            }
-
-            return { trace, nodes };
+            // Start
+            record('LOG', { msg: '--- STARTED ---', color: 'text-green-400 font-bold' });
+            _split_text(text, SEPARATORS, null);
+            record('LOG', { msg: '--- FINISHED ---', color: 'text-green-400 font-bold' });
+            
+            return trace;
         }
 
-        // --- RENDERER & PLAYBACK ---
+
+        // --- UI RENDERERS ---
 
         function highlightCodeLine(lineId) {
-            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
-            if (lineId) {
-                const el = document.getElementById(lineId);
-                if (el) {
-                    el.classList.add('active');
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }
-        }
-
-        function createDomNode(nodeId, data) {
-            if (document.getElementById(nodeId)) return;
-
-            const el = document.createElement('div');
-            el.id = nodeId;
-            el.className = 'node-card mb-2 min-w-[120px]'; 
-            
-            let displayTxt = visualizeWhitespace(data.text);
-            if (data.text.length > 40) displayTxt = visualizeWhitespace(data.text.substring(0, 40)) + '<span class="text-slate-400">...</span>';
-
-            let borderColor = 'border-slate-200';
-            let badgeHtml = '';
-
-            if (data.status === 'forced') {
-                borderColor = 'border-blue-300 bg-blue-50';
-                badgeHtml = `<span class="text-[9px] font-bold text-blue-600 bg-blue-100 px-1 rounded" title="Hard cut by char count">FORCE</span>`;
-            } else if (data.status === 'accepted') {
-                borderColor = 'border-green-300 bg-green-50';
-                badgeHtml = `<span class="text-[9px] font-bold text-green-600 bg-green-100 px-1 rounded">OK</span>`;
-            } else if (data.status === 'pending') {
-                borderColor = 'border-yellow-300 bg-yellow-50';
-            }
-
-            el.innerHTML = `
-                <div class="border ${borderColor} rounded p-2 shadow-sm text-xs relative bg-white">
-                    <div class="flex justify-between items-center mb-1 border-b border-black/5 pb-1">
-                        <span class="font-mono text-slate-500 text-[10px]">${data.text.length} chars</span>
-                        <div id="badge-${nodeId}" class="flex gap-1">${badgeHtml}</div>
-                    </div>
-                    <div class="font-mono text-slate-700 leading-snug break-all text-[11px]">${displayTxt}</div>
-                </div>
-                <div id="children-${nodeId}" class="tree-children hidden"></div>
-            `;
-
-            if (data.parentId) {
-                const parentChildrenContainer = document.getElementById(`children-${data.parentId}`);
-                if (parentChildrenContainer) {
-                    parentChildrenContainer.classList.remove('hidden');
-                    parentChildrenContainer.appendChild(el);
-                }
-            } else {
-                elTreeRoot.appendChild(el);
-            }
-            requestAnimationFrame(() => el.classList.add('node-visible'));
-        }
-
-        function updateNodeStatus(nodeId, status, separator) {
-            const el = document.getElementById(nodeId);
-            if (!el) return;
-            const inner = el.firstElementChild;
-            const badge = document.getElementById(`badge-${nodeId}`);
-
-            inner.className = "border rounded p-2 shadow-sm text-xs relative bg-white"; 
-
-            if (status === 'too_long') {
-                inner.classList.add('border-red-300', 'bg-red-50');
-                badge.innerHTML = `<span class="text-red-600 bg-red-100 px-1 rounded font-bold text-[9px]">LONG</span>`;
-            } else if (status === 'accepted') {
-                inner.classList.add('border-green-300', 'bg-green-50');
-                badge.innerHTML = `<span class="text-green-600 bg-green-100 px-1 rounded font-bold text-[9px]">OK</span>`;
-            } else if (status === 'split') {
-                inner.classList.add('border-yellow-300', 'bg-yellow-50');
-                // Format separator for display
-                let sepDisplay = separator;
-                if(sepDisplay === '\n\n') sepDisplay = '\\n\\n';
-                else if(sepDisplay === '\n') sepDisplay = '\\n';
-                else if(sepDisplay === ' ') sepDisplay = 'SPC';
-                
-                badge.innerHTML = `<span class="text-yellow-700 bg-yellow-100 px-1 rounded font-bold text-[9px]" title="Split by this separator">Split: ${sepDisplay}</span>`;
-            } else if (status === 'forced') {
-                inner.classList.add('border-blue-300', 'bg-blue-50');
-                badge.innerHTML = `<span class="text-blue-600 bg-blue-100 px-1 rounded font-bold text-[9px]" title="Force Split: No valid separators found">FORCE</span>`;
-            }
-        }
-
-        function highlightMergingNode(nodeId) {
-            document.querySelectorAll('.node-merging').forEach(el => el.classList.remove('node-merging'));
-            const el = document.getElementById(nodeId);
-            if(el) {
-                el.firstElementChild.classList.add('node-merging');
-                el.scrollIntoView({behavior: 'smooth', block: 'center', inline: 'center'});
-            }
-        }
-
-        function addToBufferDisplay(leafId, text, newLen) {
-            elBufferPlaceholder.style.display = 'none';
-            elBufferSize.innerText = newLen;
-            
-            const limit = parseInt(elTargetSize.innerText);
-            if (newLen > limit) elBufferSize.classList.add('text-red-600');
-            else elBufferSize.classList.remove('text-red-600');
-
-            const div = document.createElement('div');
-            div.id = `buf-item-${leafId}`;
-            div.className = 'buffer-enter flex-shrink-0 bg-amber-100 text-amber-900 border border-amber-200 px-2 py-1 rounded text-[10px] font-mono whitespace-nowrap overflow-hidden shadow-sm';
-            div.innerHTML = visualizeWhitespace(text);
-            elBufferContainer.appendChild(div);
-        }
-
-        function popFromBufferDisplay(leafId, newLen) {
-            elBufferSize.innerText = newLen;
-            const el = document.getElementById(`buf-item-${leafId}`);
+            document.querySelectorAll('.active-line').forEach(el => el.classList.remove('active-line'));
+            if (!lineId) return;
+            const el = document.getElementById(lineId);
             if (el) {
-                el.classList.add('buffer-exit');
+                el.classList.add('active-line');
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function renderNode(payload) {
+            const tmpl = document.getElementById('node-template');
+            const clone = tmpl.content.cloneNode(true);
+            const el = clone.querySelector('.node-item');
+            
+            el.id = payload.id;
+            
+            // Text Content (Truncated)
+            let displayTxt = payload.text;
+            if(displayTxt.length > 60) displayTxt = displayTxt.substring(0, 60) + "...";
+            
+            // Format for display
+            displayTxt = formatTextForDisplay(displayTxt);
+            
+            el.querySelector('.text-content').innerHTML = displayTxt;
+            el.querySelector('.length-badge').innerText = `${payload.text.length} chars`;
+
+            // Separator Badge
+            const sepEl = el.querySelector('.separator-badge');
+            let sepLabel = payload.levelSep;
+            if (sepLabel === '\n\n') sepLabel = '\\n\\n';
+            else if (sepLabel === '\n') sepLabel = '\\n';
+            else if (sepLabel === ' ') sepLabel = 'SPACE';
+            else if (sepLabel === '') sepLabel = 'CHAR';
+            
+            sepEl.innerText = sepLabel;
+
+            // Append to DOM
+            if (!payload.parentId) {
+                els.treeRoot.appendChild(el);
+            } else {
+                const parent = document.getElementById(payload.parentId);
+                if (parent) {
+                    const container = parent.querySelector('.tree-children');
+                    container.classList.remove('hidden');
+                    container.appendChild(el);
+                }
+            }
+            
+            // Animate entry
+            el.querySelector('.node-card').classList.add('node-enter');
+            
+            // Scroll into view
+            setTimeout(() => {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 50);
+
+            state.nodeMap.set(payload.id, el);
+        }
+
+        function highlightNode(payload) {
+            // Remove previous highlights
+            document.querySelectorAll('.highlight-active').forEach(el => el.classList.remove('highlight-active'));
+            
+            const node = document.getElementById(payload.id);
+            if(!node) return;
+            
+            const card = node.querySelector('.node-card');
+            
+            if (payload.type === 'active') {
+                card.classList.add('highlight-active');
+            } else if (payload.type === 'recurse') {
+                card.classList.add('highlight-recurse');
+            }
+        }
+
+        function completeNode(payload) {
+            const node = document.getElementById(payload.id);
+            if(!node) return;
+            const card = node.querySelector('.node-card');
+            card.classList.remove('highlight-active', 'highlight-recurse');
+            card.style.opacity = '0.6';
+            
+            const status = node.querySelector('.status-badge');
+            status.classList.remove('hidden');
+            status.innerText = "PROCESSED";
+            status.classList.add('text-green-600', 'bg-green-100');
+        }
+
+        function updateBuffer(payload) {
+            const item = document.createElement('div');
+            item.className = 'buffer-item flex-shrink-0 bg-amber-100 border border-amber-200 text-amber-800 text-[10px] px-2 py-1 rounded font-mono whitespace-nowrap animate-pulse';
+            
+            // Truncate logic inside format helper is tricky, simple truncate raw text first
+            let rawTxt = payload.text;
+            if(rawTxt.length > 15) rawTxt = rawTxt.substring(0, 15) + '...';
+            item.innerHTML = `"${formatTextForDisplay(rawTxt)}"`;
+            
+            // Clear "Empty" msg if first item
+            if(els.bufferPlaceholder.style.display !== 'none') els.bufferPlaceholder.style.display = 'none';
+            
+            els.bufferArea.appendChild(item);
+            els.bufferArea.scrollLeft = els.bufferArea.scrollWidth;
+        }
+
+        function flushBuffer(payload) {
+            // Non-destructive now, logic moved to MERGE_ADD
+            // Just maybe visually indicate start of flush
+        }
+
+        function mergeStart() {
+            els.mergeArea.innerHTML = ''; // Clear placeholder
+            els.mergeTotal.innerText = 'Length: 0';
+            els.mergeTotal.classList.remove('bg-red-100', 'text-red-700', 'border-red-200');
+            els.mergeTotal.classList.add('bg-amber-100', 'text-amber-700', 'border-amber-200');
+        }
+
+        function mergeAdd(payload) {
+            // 1. Consume from Buffer (Visual transfer)
+            const bufferItem = els.bufferArea.querySelector('.buffer-item');
+            if (bufferItem) {
+                // Animate removal logic if desired, or simple remove
+                bufferItem.remove();
+            }
+
+            // 2. Add to Merge Area
+            const item = document.createElement('div');
+            item.className = 'flex-shrink-0 bg-white border border-amber-300 text-amber-900 text-[10px] px-2 py-1 rounded font-mono shadow-sm node-enter merge-active-border';
+            let rawTxt = payload.text;
+            if(rawTxt.length > 15) rawTxt = rawTxt.substring(0, 15) + '...';
+            item.innerHTML = `"${formatTextForDisplay(rawTxt)}"`;
+            item.dataset.fulltext = payload.text;
+            
+            els.mergeArea.appendChild(item);
+            els.mergeArea.scrollLeft = els.mergeArea.scrollWidth;
+            
+            els.mergeTotal.innerText = `Length: ${payload.newTotal}`;
+            
+            if (payload.newTotal > state.chunkSize) {
+                 els.mergeTotal.classList.replace('bg-amber-100', 'bg-red-100');
+                 els.mergeTotal.classList.replace('text-amber-700', 'text-red-700');
+                 els.mergeTotal.classList.replace('border-amber-200', 'border-red-200');
+            }
+        }
+
+        function mergePop(payload) {
+            const firstItem = els.mergeArea.firstElementChild;
+            if (firstItem) {
+                firstItem.classList.add('merge-item-pop');
                 setTimeout(() => {
-                    if(el.parentNode) el.remove();
-                    if (elBufferContainer.children.length <= 1) elBufferPlaceholder.style.display = 'block';
+                    if(firstItem.parentNode) firstItem.parentNode.removeChild(firstItem);
                 }, 290);
             }
-            // Flash overlap indicator
-            elOverlapIndicator.style.opacity = '1';
-            setTimeout(() => elOverlapIndicator.style.opacity = '0', 500);
+            els.mergeTotal.innerText = `Length: ${payload.newTotal}`;
+             if (payload.newTotal <= state.chunkSize) {
+                 els.mergeTotal.classList.replace('bg-red-100', 'bg-amber-100');
+                 els.mergeTotal.classList.replace('text-red-700', 'text-amber-700');
+                 els.mergeTotal.classList.replace('border-red-200', 'border-amber-200');
+            }
         }
 
-        function emitChunkDisplay(text, len) {
-            const div = document.createElement('div');
-            div.className = 'buffer-enter min-w-[180px] max-w-[220px] h-full bg-white border border-blue-200 rounded-lg p-3 shadow-sm flex flex-col flex-shrink-0';
+        function mergeEnd() {
+            // Restore placeholder if buffer is empty
+            if (els.bufferArea.children.length === 1 && els.bufferPlaceholder) {
+                els.bufferPlaceholder.style.display = 'block';
+            }
+            // Keep the last state of merge visible for a moment, or reset
+            // els.mergeArea.innerHTML = '<div id="merge-placeholder" class="text-xs text-slate-300 italic px-2 w-full text-center">Waiting for merge_splits()...</div>';
+        }
+
+        function emitChunk(payload) {
+            const chunk = document.createElement('div');
+            chunk.className = 'flex-shrink-0 w-64 h-full bg-white border border-blue-200 rounded p-2 flex flex-col shadow-sm node-enter transition-all hover:shadow-md hover:border-blue-400';
             
-            let displayContent = visualizeWhitespace(text);
+            let displayTxt = formatTextForDisplay(payload.text);
             
-            div.innerHTML = `
-                <div class="flex justify-between items-center mb-2 border-b border-slate-100 pb-1">
-                    <span class="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> Chunk</span>
-                    <span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 rounded font-mono">${len} chars</span>
+            chunk.innerHTML = `
+                <div class="flex justify-between items-center border-b border-blue-100 pb-1 mb-1">
+                    <span class="text-[9px] font-bold text-blue-600">CHUNK ${els.finalChunksArea.children.length + 1}</span>
+                    <span class="text-[9px] font-mono text-slate-400">${payload.len}c</span>
                 </div>
-                <div class="text-[11px] text-slate-600 font-mono overflow-y-auto custom-scrollbar whitespace-pre-wrap leading-tight h-full bg-slate-50 p-1 rounded border border-slate-100">${displayContent}</div>
+                <div class="flex-1 overflow-auto text-[11px] text-slate-600 font-mono custom-scrollbar leading-relaxed bg-slate-50 p-2 rounded whitespace-pre-wrap break-words">${displayTxt}</div>
             `;
-            elFinalChunksContainer.appendChild(div);
-            elFinalChunksContainer.scrollLeft = elFinalChunksContainer.scrollWidth;
-            log(`>> CHUNK CREATED: ${len} characters`, "success");
+            els.finalChunksArea.appendChild(chunk);
+            els.chunkCount.innerText = `${els.finalChunksArea.children.length} chunks`;
+            
+            // Flash latest
+            chunk.classList.add('ring-2', 'ring-blue-400');
+            setTimeout(() => chunk.classList.remove('ring-2', 'ring-blue-400'), 500);
+            
+            els.finalChunksArea.scrollLeft = els.finalChunksArea.scrollWidth;
+        }
+
+        function appendLog(payload) {
+            const line = document.createElement('div');
+            line.className = `border-l-2 pl-2 border-slate-700 ${payload.color || 'text-slate-400'}`;
+            line.innerHTML = `<span class="opacity-50 text-[9px] mr-2">[${state.currentStep}]</span>${payload.msg}`;
+            els.console.appendChild(line);
+            els.console.scrollTop = els.console.scrollHeight;
         }
 
         // --- CONTROLLER ---
 
-        function renderStep(stepIndex) {
-            const step = appState.trace[stepIndex];
-            if (!step) return;
-
-            highlightCodeLine(step.codeLineId);
-
-            switch(step.action) {
-                case 'CREATE':
-                    createDomNode(step.nodeId, appState.nodes[step.nodeId]);
-                    if (step.payload.status) updateNodeStatus(step.nodeId, step.payload.status);
-                    if (step.payload.isForced) updateNodeStatus(step.nodeId, 'forced');
-                    break;
-                case 'STATUS_CHANGE':
-                    updateNodeStatus(step.nodeId, step.payload.status, step.payload.separator);
-                    break;
-                case 'LOG':
-                    if(step.payload.msg) log(step.payload.msg, step.payload.type);
-                    if (step.codeLineId === 'line-recurse-call') updateNodeStatus(step.nodeId, 'too_long');
-                    break;
-                case 'IGNORE_NODE':
-                    const el = document.getElementById(step.nodeId);
-                    if(el) el.classList.add('node-ignored');
-                    if(step.payload.msg) log(step.payload.msg, 'gray');
-                    break;
-                case 'MERGE_HIGHLIGHT':
-                    highlightMergingNode(step.nodeId);
-                    if(step.payload.msg) log(step.payload.msg);
-                    break;
-                case 'BUFFER_ADD':
-                    addToBufferDisplay(step.payload.leafId, step.payload.text, step.payload.newLen);
-                    break;
-                case 'BUFFER_POP':
-                    popFromBufferDisplay(step.payload.removedId, step.payload.newLen);
-                    if(step.payload.msg) log(step.payload.msg, 'bold');
-                    break;
-                case 'EMIT_CHUNK':
-                    emitChunkDisplay(step.payload.text, step.payload.len);
-                    break;
-            }
-
-            elStepCounter.innerText = `Step: ${stepIndex + 1}`;
-        }
-
-        function resetSimulation() {
-            // Reset Visuals
-            elTreeRoot.innerHTML = '';
-            elBufferContainer.innerHTML = '<div class="text-slate-400 text-xs italic w-full text-center mt-10" id="buffer-placeholder">Waiting for merge phase...</div>';
-            elFinalChunksContainer.innerHTML = '';
-            elConsoleLog.innerHTML = '';
-            elBufferSize.innerText = '0';
-            elBufferSize.classList.remove('text-red-600');
+        function processStep(stepObj) {
+            const { type, payload } = stepObj;
             
-            appState.currentStep = -1;
-            
-            // Get Values
-            const text = elInputText.value;
-            const size = parseInt(elChunkSizeInput.value);
-            const overlap = parseInt(elChunkOverlapInput.value);
-            
-            if (overlap >= size) {
-                log("Error: Chunk Overlap must be smaller than Chunk Size!", "error");
-                return;
-            }
-
-            elTargetSize.innerText = size;
-            elOverlapSize.innerText = overlap;
-            
-            // Trace
-            const result = generateTrace(text, size, overlap);
-            appState.trace = result.trace;
-            appState.nodes = result.nodes;
-            
-            elStatusText.innerText = "Ready";
-            elStatusDot.classList.remove('animate-pulse', 'bg-green-500');
-            elStatusDot.classList.add('bg-slate-400');
-            elStepCounter.innerText = "Step: 0";
-            
-            btnNext.disabled = false;
-            btnPrev.disabled = true;
-            highlightCodeLine(null);
-        }
-
-        function nextStep() {
-            if (appState.currentStep < appState.trace.length - 1) {
-                appState.currentStep++;
-                renderStep(appState.currentStep);
-                btnPrev.disabled = false;
-            }
-            if (appState.currentStep === appState.trace.length - 1) {
-                btnNext.disabled = true;
-                stopAutoPlay();
-                elStatusText.innerText = "Finished";
-                elStatusDot.classList.remove('animate-pulse');
-                elStatusDot.classList.add('bg-green-500');
+            switch(type) {
+                case 'HIGHLIGHT_CODE': highlightCodeLine(payload.line); break;
+                case 'CREATE_NODE': renderNode(payload); break;
+                case 'HIGHLIGHT_NODE': highlightNode(payload); break;
+                case 'COMPLETE_NODE': completeNode(payload); break;
+                case 'ADD_TO_BUFFER': updateBuffer(payload); break;
+                case 'FLUSH_BUFFER': flushBuffer(payload); break;
+                case 'MERGE_START': mergeStart(); break;
+                case 'MERGE_ADD': mergeAdd(payload); break;
+                case 'MERGE_POP': mergePop(payload); break;
+                case 'MERGE_END': mergeEnd(); break;
+                case 'EMIT_CHUNK': emitChunk(payload); break;
+                case 'LOG': appendLog(payload); break;
             }
         }
 
-        function prevStep() {
-            if (appState.currentStep > 0) {
-                const target = appState.currentStep - 1;
-                // Quick reset logic for "undo"
-                elTreeRoot.innerHTML = '';
-                elBufferContainer.innerHTML = '<div class="text-slate-400 text-xs italic w-full text-center mt-10" id="buffer-placeholder">Waiting for merge phase...</div>';
-                elFinalChunksContainer.innerHTML = '';
-                elConsoleLog.innerHTML = '';
-                
-                for (let i = 0; i <= target; i++) {
-                    renderStep(i);
-                }
-                appState.currentStep = target;
-                btnNext.disabled = false;
+        function step() {
+            if (state.currentStep < state.trace.length - 1) {
+                state.currentStep++;
+                processStep(state.trace[state.currentStep]);
+                els.stepCounter.innerText = `Step: ${state.currentStep + 1} / ${state.trace.length}`;
             } else {
-                resetSimulation();
+                stop();
+                setStatus("Complete", "bg-green-500");
             }
         }
 
-        function startAutoPlay() {
-            if (appState.autoPlayInterval) return;
-            elStatusText.innerText = "Running...";
-            elStatusDot.classList.remove('bg-slate-400');
-            elStatusDot.classList.add('bg-green-500', 'animate-pulse');
+        function play() {
+            if (state.isPlaying) return;
+            state.isPlaying = true;
+            els.btnPlay.innerHTML = `<i data-lucide="pause" class="w-3 h-3 fill-current"></i> Pause`;
+            lucide.createIcons();
+            els.btnPlay.classList.replace('bg-blue-600', 'bg-amber-600');
+            els.btnPlay.classList.replace('border-blue-600', 'border-amber-600');
             
-            appState.autoPlayInterval = setInterval(() => {
-                if (appState.currentStep < appState.trace.length - 1) {
-                    nextStep();
+            setStatus("Running", "bg-green-500 animate-pulse");
+            
+            state.timer = setInterval(() => {
+                if(state.currentStep >= state.trace.length - 1) {
+                    stop();
                 } else {
-                    stopAutoPlay();
+                    step();
                 }
-            }, 80); 
+            }, 100); // Speed
         }
 
-        function stopAutoPlay() {
-            if (appState.autoPlayInterval) {
-                clearInterval(appState.autoPlayInterval);
-                appState.autoPlayInterval = null;
-                chkAutoPlay.checked = false;
-                if(appState.currentStep < appState.trace.length - 1) {
-                    elStatusText.innerText = "Paused";
-                    elStatusDot.classList.remove('animate-pulse');
-                }
-            }
+        function stop() {
+            state.isPlaying = false;
+            clearInterval(state.timer);
+            els.btnPlay.innerHTML = `<i data-lucide="play" class="w-3 h-3 fill-current"></i> Play`;
+            lucide.createIcons();
+            els.btnPlay.classList.replace('bg-amber-600', 'bg-blue-600');
+            els.btnPlay.classList.replace('border-amber-600', 'border-blue-600');
+            
+            if(state.currentStep < state.trace.length - 1) setStatus("Paused", "bg-amber-400");
+            else setStatus("Complete", "bg-green-500");
         }
 
-        // --- EVENTS ---
-        // btnStart.addEventListener('click', () => { resetSimulation(); nextStep(); });
-        btnReset.addEventListener('click', () => { stopAutoPlay(); resetSimulation(); });
-        btnNext.addEventListener('click', () => { stopAutoPlay(); nextStep(); });
-        btnPrev.addEventListener('click', () => { stopAutoPlay(); prevStep(); });
-        chkAutoPlay.addEventListener('change', (e) => { e.target.checked ? startAutoPlay() : stopAutoPlay(); });
+        function reset() {
+            stop();
+            state.currentStep = -1;
+            state.nodeMap.clear();
+            traceIdCounter = 0;
+            
+            // Clear DOM
+            els.treeRoot.innerHTML = '';
+            els.bufferPlaceholder.style.display = 'block';
+            els.bufferArea.innerHTML = '';
+            els.bufferArea.appendChild(els.bufferPlaceholder);
+            
+            els.mergeArea.innerHTML = '<div id="merge-placeholder" class="text-xs text-slate-300 italic px-2 w-full text-center">Waiting for merge_splits()...</div>';
+            els.finalChunksArea.innerHTML = '';
+            els.console.innerHTML = '';
+            els.chunkCount.innerText = '0 chunks';
+            els.stepCounter.innerText = 'Step: 0';
+            els.mergeTotal.innerText = 'Length: 0';
+            els.mergeTotal.className = 'text-[10px] font-mono bg-amber-100 text-amber-700 px-1.5 rounded border border-amber-200';
+            
+            highlightCodeLine(null);
+            
+            // Regenerate Trace
+            state.text = els.inputText.value;
+            state.chunkSize = parseInt(els.rangeSize.value);
+            state.overlap = parseInt(els.rangeOverlap.value);
+            
+            state.trace = generateTrace(state.text, state.chunkSize, state.overlap);
+            
+            setStatus("Ready", "bg-blue-400");
+            appendLog({ msg: "Simulation reset. Press Play." });
+        }
 
-        elInputText.addEventListener('input', () => stopAutoPlay());
+        function setStatus(text, colorClass) {
+            els.statusText.innerText = text;
+            els.statusDot.className = `w-2 h-2 rounded-full ${colorClass}`;
+        }
+
+        // --- EVENT LISTENERS ---
+        els.btnReset.addEventListener('click', reset);
+        els.btnStep.addEventListener('click', () => { stop(); step(); });
+        els.btnPlay.addEventListener('click', () => { state.isPlaying ? stop() : play(); });
         
-        elChunkSizeInput.addEventListener('input', (e) => { 
-            elChunkSizeVal.innerText = e.target.value; 
-            stopAutoPlay(); 
-            resetSimulation(); 
+        els.btnLoad.addEventListener('click', () => {
+            els.inputText.value = SAMPLE_TEXT;
+            reset();
         });
 
-        elChunkOverlapInput.addEventListener('input', (e) => {
-            elChunkOverlapVal.innerText = e.target.value;
-            stopAutoPlay();
-            resetSimulation();
-        });
+        const updateConfig = () => {
+            els.valSize.innerText = els.rangeSize.value;
+            els.valOverlap.innerText = els.rangeOverlap.value;
+            reset();
+        };
+
+        els.rangeSize.addEventListener('input', updateConfig);
+        els.rangeOverlap.addEventListener('input', updateConfig);
+        els.inputText.addEventListener('change', reset);
 
         // --- INIT ---
-        elInputText.value = DEFAULT_TEXT;
         lucide.createIcons();
-        resetSimulation();
+        els.inputText.value = SAMPLE_TEXT;
+        reset();
 
     </script>
 </body>
