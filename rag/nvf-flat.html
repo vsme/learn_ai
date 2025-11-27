@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IVF_FLAT 算法可视化 (参数详解版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { touch-action: none; max-width: 100%; height: auto; }
+        
+        /* Code Syntax Highlighting */
+        .code-container { 
+            color: #d4d4d4; 
+            font-family: 'Consolas', 'Monaco', monospace; 
+            font-size: 0.8rem; 
+            line-height: 1.5; 
+            white-space: pre; 
+        }
+        .code-line { display: block; border-left: 3px solid transparent; min-height: 1.5em; padding-right: 1em; }
+        .code-line.active { background-color: #37373d; border-left-color: #3b82f6; }
+        
+        .kwd { color: #569cd6; font-weight: bold; } 
+        .func { color: #dcdcaa; } 
+        .var { color: #9cdcfe; } 
+        .num { color: #b5cea8; } 
+        .str { color: #ce9178; } 
+        .comment { color: #6a9955; font-style: italic; }
+        .cls { color: #4ec9b0; }
+        .op { color: #d4d4d4; }
+        .param-hl { color: #f472b6; font-weight: bold; } /* Pink for nprobe */
+        .list-hl { color: #818cf8; font-weight: bold; } /* Indigo for nlist */
+
+        /* Custom Scrollbar */
+        .dark-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .dark-scrollbar::-webkit-scrollbar-track { background: #1e1e1e; }
+        .dark-scrollbar::-webkit-scrollbar-thumb { background: #424242; border-radius: 4px; }
+        
+        .light-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .light-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .light-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+
+        /* Resizable Sidebar */
+        .resizable-sidebar { width: 100%; }
+        @media (min-width: 1024px) {
+            .resizable-sidebar { width: var(--panel-width); flex-shrink: 0; }
+            .resizer { width: 4px; cursor: col-resize; background-color: #e5e7eb; transition: 0.2s; z-index: 50; flex-shrink: 0; }
+            .resizer:hover, .resizer.resizing { background-color: #3b82f6; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 h-14 flex items-center justify-between px-4 flex-shrink-0 z-20 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-1.5 rounded-md shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-base font-bold text-gray-800 tracking-tight">IVF_FLAT 索引算法可视化</h1>
+            </div>
+            <!-- GitHub Repo stars -->
+            <a
+              href="https://github.com/vsme/ai-viz"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                src="//img.shields.io/github/stars/vsme/ai-viz"
+                alt="GitHub Repo stars"
+              />
+            </a>
+        </div>
+        <div class="flex gap-3">
+            <div class="flex flex-col items-end leading-tight">
+                <span class="text-[10px] text-gray-500 uppercase font-bold">倒排链数 (Partitions)</span>
+                <div class="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                    nlist = 8
+                </div>
+            </div>
+            <div class="flex flex-col items-end leading-tight">
+                <span class="text-[10px] text-gray-500 uppercase font-bold">探测深度 (Search Scope)</span>
+                <div class="text-xs font-bold text-pink-700 bg-pink-50 px-2 py-0.5 rounded border border-pink-200">
+                    nprobe = 3
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+        
+        <!-- LEFT: CODE -->
+        <aside id="left-panel" class="resizable-sidebar bg-[#1e1e1e] border-r border-gray-700 flex flex-col z-10 order-3 lg:order-1 h-1/3 lg:h-auto" style="--panel-width: 420px;">
+            <div class="h-9 border-b border-[#2d2d2d] bg-[#252526] flex items-center justify-between px-4 flex-shrink-0">
+                <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <svg class="w-3 h-3 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                    INDEX_IVF_FLAT.PY
+                </span>
+            </div>
+            <div class="flex-1 overflow-y-auto dark-scrollbar p-2 code-container" id="code-display"></div>
+        </aside>
+
+        <div id="resizer-left" class="hidden lg:block resizer order-1"></div>
+
+        <!-- MIDDLE: CANVAS -->
+        <main class="flex-1 bg-gray-50 flex flex-col items-center justify-center p-4 overflow-auto relative order-1 lg:order-2 h-1/3 lg:h-auto gap-4">
+            <div class="relative shadow-lg rounded-lg border border-gray-200 bg-white group">
+                <canvas id="canvas" width="600" height="500" class="block rounded-lg cursor-crosshair"></canvas>
+                <div class="absolute top-2 right-2 text-[10px] text-gray-300 font-mono pointer-events-none">600x500</div>
+                <!-- Interactive Hint -->
+                <div id="canvas-hint" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-sm font-medium pointer-events-none transition-opacity duration-300 opacity-0">
+                    在画布上移动鼠标以进行搜索
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div class="w-full max-w-[600px] bg-white p-3 rounded-lg border border-gray-200 text-xs shadow-sm flex flex-wrap justify-center gap-4 sm:justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-sm bg-gray-300 block"></span>
+                    <span class="text-gray-500">原始向量</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 text-center leading-4 text-indigo-600 font-bold text-base">★</span>
+                    <span class="text-gray-700">聚类中心 / 倒排链头</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-pink-100 border border-pink-500 block"></span>
+                    <span class="text-gray-700">nprobe 命中区域</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-green-500 block"></span>
+                    <span class="text-gray-700">精排结果 (Top-K)</span>
+                </div>
+            </div>
+        </main>
+
+        <div id="resizer-right" class="hidden lg:block resizer order-2"></div>
+
+        <!-- RIGHT: CONTROLS -->
+        <aside id="right-panel" class="resizable-sidebar bg-white border-l border-gray-200 flex flex-col shadow-[-2px_0_10px_rgba(0,0,0,0.02)] z-10 order-2 lg:order-3 h-1/3 lg:h-auto" style="--panel-width: 320px;">
+            <div class="flex-1 overflow-y-auto light-scrollbar p-5 space-y-5">
+                
+                <!-- Status -->
+                <div class="relative pl-3">
+                    <div class="absolute left-0 top-1 bottom-1 w-1 bg-indigo-500 rounded-full transition-colors duration-300" id="status-bar"></div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span id="step-tag" class="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Init</span>
+                        <h2 id="step-title" class="text-base font-bold text-gray-800">初始化数据</h2>
+                    </div>
+                    <p id="step-desc" class="text-sm text-gray-600 leading-relaxed">数据分布完成，准备构建索引。</p>
+                    
+                    <div id="insight-box" class="hidden mt-3 bg-amber-50 border border-amber-100 rounded-md p-3 text-sm text-amber-900 transition-all">
+                        <span id="insight-text" class="leading-relaxed block opacity-90">...</span>
+                    </div>
+                </div>
+
+                <hr class="border-gray-100">
+
+                <!-- Stats -->
+                <div>
+                    <h3 class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">索引性能指标</h3>
+                    <div class="space-y-3 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-500">nlist (总区域数)</span>
+                            <span class="font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 rounded">8</span>
+                        </div>
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-500">nprobe (检查区域)</span>
+                            <span class="font-mono font-bold text-pink-600 bg-pink-50 px-1.5 rounded">3</span>
+                        </div>
+                        <div class="border-t border-gray-200 my-1"></div>
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-500">搜索比例</span>
+                            <div class="text-right">
+                                <span class="block font-mono font-bold text-gray-800">37.5%</span>
+                                <span class="text-[10px] text-gray-400">只计算 3/8 的数据</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-500">精排计算量</span>
+                            <span class="font-mono font-bold text-gray-800" id="calc-count">-</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Footer Buttons -->
+            <div class="p-4 border-t border-gray-100 bg-gray-50/50 flex-shrink-0 grid grid-cols-3 gap-2">
+                <button id="btn-reset" class="col-span-1 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-md transition font-medium text-sm shadow-sm">
+                    重置
+                </button>
+                <button id="btn-next" class="col-span-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow-sm transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    <span>下一步</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
+                </button>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const POINT_COUNT = 200;
+        const NLIST = 8;     // Number of Voronoi cells (clusters)
+        const NPROBE = 3;    // Number of cells to visit during search
+        const TOP_K = 5;
+        const CANVAS_WIDTH = 600;
+        const CANVAS_HEIGHT = 500;
+        
+        // --- State ---
+        let points = [];        // All vectors {x, y, clusterIdx}
+        let centroids = [];     // Cluster centers {x, y, color}
+        let step = 0;           // 0:Init, 1:Train, 2:Add, 3:SearchReady
+        let queryPos = null;    // Current mouse position for search
+        let searchResult = null; // { nearestCentroids: [], candidates: [], topK: [] }
+
+        // Colors for clusters
+        const COLORS = [
+            '#ef4444', '#f97316', '#f59e0b', '#84cc16', 
+            '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6'
+        ];
+
+        // --- Elements ---
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const btnReset = document.getElementById('btn-reset');
+        const btnNext = document.getElementById('btn-next');
+        const elStepTag = document.getElementById('step-tag');
+        const elStepTitle = document.getElementById('step-title');
+        const elStepDesc = document.getElementById('step-desc');
+        const elInsightBox = document.getElementById('insight-box');
+        const elInsightText = document.getElementById('insight-text');
+        const elCodeDisplay = document.getElementById('code-display');
+        const elStatusBar = document.getElementById('status-bar');
+        const elCalcCount = document.getElementById('calc-count');
+        const elCanvasHint = document.getElementById('canvas-hint');
+
+        // --- Initialization ---
+        function init() {
+            points = [];
+            centroids = [];
+            step = 0;
+            queryPos = null;
+            searchResult = null;
+            
+            // Generate clustered data for better visual effect
+            for (let i = 0; i < NLIST; i++) {
+                let cx = Math.random() * (CANVAS_WIDTH - 100) + 50;
+                let cy = Math.random() * (CANVAS_HEIGHT - 100) + 50;
+                for (let j = 0; j < POINT_COUNT / NLIST; j++) {
+                    points.push({
+                        x: cx + (Math.random() - 0.5) * 100,
+                        y: cy + (Math.random() - 0.5) * 100,
+                        clusterIdx: -1
+                    });
+                }
+            }
+            updateUI();
+            draw();
+        }
+
+        // --- Logic: K-Means Training (Simplified) ---
+        function runKMeans() {
+            // Pick random initial centroids
+            centroids = [];
+            let indices = new Set();
+            while(indices.size < NLIST) indices.add(Math.floor(Math.random() * points.length));
+            indices.forEach(idx => {
+                centroids.push({ x: points[idx].x, y: points[idx].y, color: COLORS[centroids.length % COLORS.length] });
+            });
+
+            // Run a few iterations
+            for (let iter = 0; iter < 5; iter++) {
+                // Assignment
+                let clusters = Array(NLIST).fill().map(() => []);
+                points.forEach(p => {
+                    let minD = Infinity, cIdx = -1;
+                    centroids.forEach((c, i) => {
+                        let d = (p.x - c.x)**2 + (p.y - c.y)**2;
+                        if (d < minD) { minD = d; cIdx = i; }
+                    });
+                    clusters[cIdx].push(p);
+                });
+
+                // Update centers
+                clusters.forEach((cluster, i) => {
+                    if (cluster.length === 0) return;
+                    let sx = 0, sy = 0;
+                    cluster.forEach(p => { sx += p.x; sy += p.y; });
+                    centroids[i].x = sx / cluster.length;
+                    centroids[i].y = sy / cluster.length;
+                });
+            }
+        }
+
+        // --- Logic: Add (Assign Points to Centroids) ---
+        function assignPoints() {
+            points.forEach(p => {
+                let minD = Infinity, cIdx = -1;
+                centroids.forEach((c, i) => {
+                    let d = (p.x - c.x)**2 + (p.y - c.y)**2;
+                    if (d < minD) { minD = d; cIdx = i; }
+                });
+                p.clusterIdx = cIdx;
+            });
+        }
+
+        // --- Logic: Search ---
+        function performSearch(qx, qy) {
+            if (step < 3) return;
+
+            // 1. Coarse Search: Find nearest NPROBE centroids
+            let centroidDists = centroids.map((c, i) => ({
+                id: i,
+                dist: (qx - c.x)**2 + (qy - c.y)**2
+            }));
+            centroidDists.sort((a, b) => a.dist - b.dist);
+            let nearestCentroids = centroidDists.slice(0, NPROBE).map(item => item.id);
+
+            // 2. Fine Search: Scan points ONLY in those clusters
+            let candidates = [];
+            points.forEach(p => {
+                if (nearestCentroids.includes(p.clusterIdx)) {
+                    let d = (qx - p.x)**2 + (qy - p.y)**2;
+                    candidates.push({ point: p, dist: d });
+                }
+            });
+
+            // 3. Top K
+            candidates.sort((a, b) => a.dist - b.dist);
+            let topK = candidates.slice(0, TOP_K).map(c => c.point);
+
+            searchResult = {
+                nearestCentroids,
+                candidatesCount: candidates.length,
+                topK
+            };
+            
+            elCalcCount.textContent = candidates.length;
+        }
+
+        // --- Step Controller ---
+        function nextStep() {
+            if (step === 0) {
+                step = 1;
+                runKMeans();
+            } else if (step === 1) {
+                step = 2;
+                assignPoints();
+            } else if (step === 2) {
+                step = 3;
+                queryPos = { x: CANVAS_WIDTH/2, y: CANVAS_HEIGHT/2 };
+                performSearch(queryPos.x, queryPos.y);
+                elCanvasHint.classList.remove('opacity-0');
+                setTimeout(() => elCanvasHint.classList.add('opacity-0'), 3000);
+            }
+            updateUI();
+            draw();
+        }
+
+        // --- Drawing ---
+        function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius, color) {
+            let rot = Math.PI / 2 * 3;
+            let x = cx; let y = cy; let step = Math.PI / spikes;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - outerRadius);
+            for (let i = 0; i < spikes; i++) {
+                x = cx + Math.cos(rot) * outerRadius;
+                y = cy + Math.sin(rot) * outerRadius;
+                ctx.lineTo(x, y); rot += step;
+                x = cx + Math.cos(rot) * innerRadius;
+                y = cy + Math.sin(rot) * innerRadius;
+                ctx.lineTo(x, y); rot += step;
+            }
+            ctx.lineTo(cx, cy - outerRadius);
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill(); 
+            ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+            ctx.stroke();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // Draw Points
+            points.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                if (step >= 2) {
+                    ctx.fillStyle = p.clusterIdx >= 0 ? COLORS[p.clusterIdx] : '#ccc';
+                    if (step === 3 && searchResult) {
+                        const isInSearch = searchResult.nearestCentroids.includes(p.clusterIdx);
+                        ctx.globalAlpha = isInSearch ? 1.0 : 0.15; // Grey out ignored points
+                    }
+                } else {
+                    ctx.fillStyle = '#9ca3af';
+                }
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            });
+
+            // Draw Centroids
+            if (step >= 1) {
+                centroids.forEach((c, i) => {
+                    let isTarget = step === 3 && searchResult && searchResult.nearestCentroids.includes(i);
+                    let size = isTarget ? 14 : 10;
+                    let color = c.color;
+                    
+                    // Draw NPROBE highlight halo
+                    if (isTarget) {
+                        ctx.beginPath();
+                        ctx.arc(c.x, c.y, 45, 0, Math.PI * 2);
+                        ctx.fillStyle = c.color + '22'; // transparent hex
+                        ctx.fill();
+                        ctx.strokeStyle = c.color;
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([4, 4]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+
+                    // Fix: Pass ctx to drawStar
+                    drawStar(ctx, c.x, c.y, 5, size, size/2, color);
+                    
+                    // Draw nlist labels (List-0, List-1...)
+                    ctx.fillStyle = 'black';
+                    ctx.font = '10px Consolas';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    // ctx.fillText(`L${i}`, c.x, c.y - size);
+                });
+            }
+
+            // Draw Search Query & Results (Step 3)
+            if (step === 3 && queryPos) {
+                // Query Point
+                ctx.beginPath();
+                ctx.arc(queryPos.x, queryPos.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = 'black';
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Connections to nearest centroids (Visualize nprobe)
+                if (searchResult) {
+                    searchResult.nearestCentroids.forEach(idx => {
+                        let c = centroids[idx];
+                        ctx.beginPath();
+                        ctx.moveTo(queryPos.x, queryPos.y);
+                        ctx.lineTo(c.x, c.y);
+                        ctx.strokeStyle = '#db2777'; // Pink for nprobe
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([5, 5]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                        
+                        // Label nprobe connection
+                        // let midX = (queryPos.x + c.x) / 2;
+                        // let midY = (queryPos.y + c.y) / 2;
+                        // ctx.fillStyle = '#db2777';
+                        // ctx.fillText("?", midX, midY);
+                    });
+                    
+                    // Label nprobe action
+                    ctx.fillStyle = '#db2777';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`Checking ${NPROBE} lists`, queryPos.x + 10, queryPos.y - 10);
+
+                    // Highlight Top K
+                    searchResult.topK.forEach(p => {
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                        ctx.strokeStyle = '#22c55e'; // green-500
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    });
+                }
+            }
+        }
+
+        // --- Interaction ---
+        canvas.addEventListener('mousemove', e => {
+            if (step !== 3) return;
+            const rect = canvas.getBoundingClientRect();
+            queryPos = {
+                x: (e.clientX - rect.left) * (canvas.width / rect.width),
+                y: (e.clientY - rect.top) * (canvas.height / rect.height)
+            };
+            performSearch(queryPos.x, queryPos.y);
+            draw();
+        });
+
+        // --- UI Updates ---
+        function renderCode(activeStep) {
+            const codeLines = [
+                { id: 'class', html: '<span class="kwd">class</span> <span class="cls">IndexIVFFlat</span>:', indent: 0 },
+                { id: 'init', html: '<span class="kwd">def</span> <span class="func">__init__</span>(<span class="var">self</span>, <span class="var">nlist</span>, <span class="var">nprobe</span>):', indent: 1 },
+                { id: 'init_b', html: '<span class="comment"># nlist: 倒排链(聚类)的总数</span>', indent: 2 },
+                { id: 'init_c', html: '<span class="var">self</span>.quantizer = <span class="cls">KMeans</span>(k=<span class="list-hl">nlist</span>)', indent: 2 },
+                { id: 'blank1', html: '', indent: 0 },
+                { id: 'train', html: '<span class="kwd">def</span> <span class="func">train</span>(<span class="var">self</span>, <span class="var">data</span>):', indent: 1 },
+                { id: 'train_b', html: '<span class="comment"># 1. 训练: 将空间划分为 nlist 个区域</span>', indent: 2 },
+                { id: 'train_c', html: '<span class="var">self</span>.quantizer.<span class="func">train</span>(data)', indent: 2 },
+                { id: 'blank2', html: '', indent: 0 },
+                { id: 'add', html: '<span class="kwd">def</span> <span class="func">add</span>(<span class="var">self</span>, <span class="var">vectors</span>):', indent: 1 },
+                { id: 'add_b', html: '<span class="comment"># 2. 添加: 向量归入最近的倒排链</span>', indent: 2 },
+                { id: 'add_c', html: '<span class="kwd">for</span> <span class="var">v</span> <span class="kwd">in</span> <span class="var">vectors</span>:', indent: 2 },
+                { id: 'add_d', html: '<span class="var">idx</span> = <span class="var">self</span>.quantizer.<span class="func">assign</span>(v)', indent: 3 },
+                { id: 'add_e', html: '<span class="var">self</span>.inv_lists[idx].<span class="func">append</span>(v)', indent: 3 },
+                { id: 'blank3', html: '', indent: 0 },
+                { id: 'search', html: '<span class="kwd">def</span> <span class="func">search</span>(<span class="var">self</span>, <span class="var">query</span>, <span class="var">k</span>):', indent: 1 },
+                { id: 'search_a', html: '<span class="comment"># 3.1 粗排: 找最近的 nprobe 个区域</span>', indent: 2 },
+                { id: 'search_b', html: '<span class="var">centers</span> = <span class="var">self</span>.quantizer.<span class="func">search</span>(q, <span class="param-hl">nprobe</span>)', indent: 2 },
+                { id: 'search_c', html: '<span class="comment"># 3.2 精排: 只计算这些区域内的向量</span>', indent: 2 },
+                { id: 'search_d', html: '<span class="var">candidates</span> = []', indent: 2 },
+                { id: 'search_e', html: '<span class="kwd">for</span> <span class="var">c</span> <span class="kwd">in</span> <span class="var">centers</span>:', indent: 2 },
+                { id: 'search_f', html: '<span class="var">candidates</span>.<span class="func">extend</span>(<span class="var">self</span>.inv_lists[c])', indent: 3 },
+                { id: 'search_g', html: '<span class="kwd">return</span> <span class="func">top_k</span>(candidates, query, k)', indent: 2 }
+            ];
+
+            const activeIds = new Set();
+            if (activeStep === 0) {
+                activeIds.add('class'); activeIds.add('init'); activeIds.add('init_b'); activeIds.add('init_c');
+            } else if (activeStep === 1) {
+                activeIds.add('train'); activeIds.add('train_b'); activeIds.add('train_c');
+            } else if (activeStep === 2) {
+                activeIds.add('add'); activeIds.add('add_b'); activeIds.add('add_c'); activeIds.add('add_d'); activeIds.add('add_e');
+            } else if (activeStep === 3) {
+                activeIds.add('search'); activeIds.add('search_a'); activeIds.add('search_b'); activeIds.add('search_c'); activeIds.add('search_d'); activeIds.add('search_e'); activeIds.add('search_f'); activeIds.add('search_g');
+            }
+
+            let html = '';
+            codeLines.forEach(line => {
+                const isActive = activeIds.has(line.id);
+                const opacityClass = (activeStep > 0 && !isActive) ? 'opacity-30' : '';
+                const activeClass = isActive ? 'active' : '';
+                html += `<div class="code-line ${activeClass} ${opacityClass}" style="padding-left: ${line.indent * 1.5}em">${line.html}</div>`;
+            });
+            elCodeDisplay.innerHTML = html;
+        }
+
+        function updateUI() {
+            renderCode(step);
+            elInsightBox.classList.remove('hidden');
+
+            switch(step) {
+                case 0: // Init
+                    elStepTag.textContent = 'Init';
+                    elStepTag.className = "bg-gray-100 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide";
+                    elStatusBar.className = "absolute left-0 top-1 bottom-1 w-1 bg-gray-500 rounded-full transition-colors duration-300";
+                    elStepTitle.textContent = "初始化数据";
+                    elStepDesc.textContent = "生成随机向量数据。IVF 需要先定义参数 nlist。";
+                    elInsightText.innerHTML = "<strong>nlist (Number of Lists):</strong> <br>也就是我们要在空间中划分出多少个聚类（倒排链）。本例中 nlist = 8。";
+                    btnNext.innerHTML = `<span>开始训练 (Train)</span> <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>`;
+                    btnNext.disabled = false;
+                    elCalcCount.textContent = "-";
+                    break;
+                case 1: // Train
+                    elStepTag.textContent = 'Train';
+                    elStepTag.className = "bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide";
+                    elStatusBar.className = "absolute left-0 top-1 bottom-1 w-1 bg-indigo-500 rounded-full transition-colors duration-300";
+                    elStepTitle.textContent = "训练量化器 (nlist)";
+                    elStepDesc.innerHTML = "通过 <a class=\"text-indigo-600 hover:text-indigo-800\" href=\"./k-means.html\" target=\"_blank\">K-Means</a> 将空间划分为 nlist=8 个区域。";
+                    elInsightText.innerHTML = "<strong>nlist 的作用:</strong><br>这 8 个五角星就是划分好的中心。nlist 越大，每个区域包含的向量越少，搜索粒度越细，但训练时间越长。";
+                    btnNext.innerHTML = `<span>添加向量 (Add)</span> <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>`;
+                    break;
+                case 2: // Add
+                    elStepTag.textContent = 'Add';
+                    elStepTag.className = "bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide";
+                    elStatusBar.className = "absolute left-0 top-1 bottom-1 w-1 bg-blue-500 rounded-full transition-colors duration-300";
+                    elStepTitle.textContent = "构建倒排表";
+                    elStepDesc.textContent = "将每个点分配给最近的中心。";
+                    elInsightText.innerHTML = "每个颜色的点群代表一个 <strong>倒排链 (Inverted List)</strong>。搜索时，我们只需要把整个链加载出来，而不用管其他颜色的点。";
+                    btnNext.innerHTML = `<span>准备搜索 (Search)</span> <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>`;
+                    break;
+                case 3: // Search
+                    elStepTag.textContent = 'Search';
+                    elStepTag.className = "bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide";
+                    elStatusBar.className = "absolute left-0 top-1 bottom-1 w-1 bg-green-500 rounded-full transition-colors duration-300";
+                    elStepTitle.textContent = "交互式搜索 (nprobe)";
+                    elStepDesc.textContent = "只检查最近的 nprobe=3 个区域。";
+                    elInsightText.innerHTML = "<strong>nprobe (Number of Probes):</strong><br>看画布上的粉色虚线。每次查询，我们只挑选 <strong>3个</strong> 最近的中心（粉色光环），并忽略其他 5 个区域（变灰的点）。<br>nprobe 越大，结果越准，但速度越慢。";
+                    btnNext.innerHTML = `<span>演示完成</span>`;
+                    btnNext.disabled = true;
+                    break;
+            }
+        }
+
+        // Resizing Logic
+        const makeResizable = (resizerId, panelId, isLeft) => {
+            const resizer = document.getElementById(resizerId);
+            const panel = document.getElementById(panelId);
+            if (!resizer || !panel) return;
+            resizer.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                resizer.classList.add('resizing');
+                document.body.style.cursor = 'col-resize';
+                const startX = e.clientX;
+                const startWidth = parseInt(window.getComputedStyle(panel).width, 10);
+                const onMouseMove = (moveEvent) => {
+                    let newWidth = isLeft ? startWidth + (moveEvent.clientX - startX) : startWidth - (moveEvent.clientX - startX);
+                    if (newWidth < 200) newWidth = 200; if (newWidth > 600) newWidth = 600;
+                    panel.style.setProperty('--panel-width', `${newWidth}px`);
+                };
+                const onMouseUp = () => {
+                    resizer.classList.remove('resizing');
+                    document.body.style.cursor = '';
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                };
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        };
+        makeResizable('resizer-left', 'left-panel', true);
+        makeResizable('resizer-right', 'right-panel', false);
+
+        btnReset.addEventListener('click', init);
+        btnNext.addEventListener('click', nextStep);
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>
