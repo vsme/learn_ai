@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HNSW 最小堆 (Min-Heap) 可视化</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Node Animations */
+        .node-circle {
+            transition: fill 0.3s, stroke 0.3s;
+            fill: white;
+            stroke: #3b82f6;
+            stroke-width: 2px;
+        }
+        .node-text {
+            font-size: 14px;
+            font-weight: bold;
+            fill: #1e293b;
+            pointer-events: none;
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+        
+        /* Highlights */
+        .highlight-compare { stroke: #f59e0b !important; fill: #fffbeb !important; stroke-width: 3px; }
+        .highlight-swap { stroke: #10b981 !important; fill: #ecfdf5 !important; stroke-width: 3px; }
+        .highlight-target { stroke: #ef4444 !important; fill: #fef2f2 !important; stroke-width: 3px; }
+
+        /* Code Highlighting */
+        .code-line {
+            padding-left: 1rem;
+            border-left: 4px solid transparent;
+            opacity: 0.7;
+            transition: all 0.2s;
+        }
+        .code-active {
+            background-color: #334155;
+            border-left-color: #f59e0b;
+            color: #fff;
+            opacity: 1;
+            font-weight: bold;
+        }
+
+        /* Array Box Styles */
+        .array-box { transition: all 0.3s; }
+        .array-box.active {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-color: #3b82f6;
+        }
+
+        /* Resizers */
+        .resizer {
+            width: 4px;
+            background-color: #cbd5e1;
+            cursor: col-resize;
+            transition: background-color 0.2s;
+            z-index: 50;
+        }
+        .resizer:hover, .resizer.resizing {
+            background-color: #3b82f6;
+        }
+
+        .resizer-h {
+            height: 4px;
+            width: 100%;
+            background-color: #cbd5e1;
+            cursor: row-resize;
+            transition: background-color 0.2s;
+            z-index: 50;
+        }
+        .resizer-h:hover, .resizer-h.resizing {
+            background-color: #3b82f6;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        
+        /* Node Fade Out Animation */
+        .fade-out { animation: fadeOut 0.3s forwards; }
+        @keyframes fadeOut { to { opacity: 0; transform: scale(0.5); } }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 h-14 flex items-center justify-between px-6 flex-shrink-0 z-20 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 p-1.5 rounded text-white shadow-sm">
+                <i data-lucide="layers" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-slate-800 leading-none">HNSW 最小堆 (Min-Heap)</h1>
+                <div class="text-[10px] text-slate-500 mt-0.5">候选集队列算法演示</div>
+            </div>
+            <!-- GitHub Repo stars -->
+            <a
+              href="https://github.com/vsme/ai-viz"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                src="//img.shields.io/github/stars/vsme/ai-viz"
+                alt="GitHub Repo stars"
+              />
+            </a>
+        </div>
+        <div class="flex items-center gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-1"><i data-lucide="mouse-pointer-2" class="w-3 h-3"></i> 拖拽平移</div>
+            <div class="flex items-center gap-1"><i data-lucide="zoom-in" class="w-3 h-3"></i> 滚轮缩放</div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden" id="main-container">
+        
+        <!-- LEFT: Python Code -->
+        <aside id="left-panel" class="bg-[#1e293b] flex flex-col border-r border-slate-700 z-10 shadow-lg text-slate-300" style="width: 300px;">
+            <div class="p-3 border-b border-slate-700 bg-[#0f172a]">
+                <h2 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <i data-lucide="code" class="w-3 h-3"></i> Python 伪代码
+                </h2>
+            </div>
+            <div class="flex-1 overflow-auto py-4 mono text-[11px] leading-relaxed" id="code-panel">
+                <!-- Insert Code -->
+                <div class="mb-4">
+                    <div class="px-4 text-emerald-400 font-bold mb-1"># 插入操作 (Insert)</div>
+                    <div id="c-insert-def" class="code-line">def push(heap, val):</div>
+                    <div id="c-insert-append" class="code-line pl-6">heap.append(val)</div>
+                    <div id="c-insert-bubble" class="code-line pl-6">bubble_up(len(heap) - 1)</div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="px-4 text-emerald-400 font-bold mb-1"># 上浮调整 (Bubble Up)</div>
+                    <div id="c-up-def" class="code-line">def bubble_up(idx):</div>
+                    <div id="c-up-loop" class="code-line pl-6">while idx > 0:</div>
+                    <div id="c-up-parent" class="code-line pl-10">p_idx = (idx - 1) // 2</div>
+                    <div id="c-up-compare" class="code-line pl-10">if heap[idx] < heap[p_idx]:</div>
+                    <div id="c-up-swap" class="code-line pl-14">swap(idx, p_idx)</div>
+                    <div id="c-up-next" class="code-line pl-14">idx = p_idx</div>
+                    <div id="c-up-break" class="code-line pl-10">else: break</div>
+                </div>
+
+                <!-- Extract Code -->
+                <div class="mb-4">
+                    <div class="px-4 text-amber-400 font-bold mb-1"># 取出操作 (Extract)</div>
+                    <div id="c-pop-def" class="code-line">def pop(heap):</div>
+                    <div id="c-pop-empty" class="code-line pl-6">if not heap: return None</div>
+                    <div id="c-pop-root" class="code-line pl-6">min_val = heap[0]</div>
+                    <div id="c-pop-move" class="code-line pl-6">heap[0] = heap.pop()</div>
+                    <div id="c-pop-bubble" class="code-line pl-6">bubble_down(0)</div>
+                    <div id="c-pop-ret" class="code-line pl-6">return min_val</div>
+                </div>
+
+                <div class="mb-10">
+                    <div class="px-4 text-amber-400 font-bold mb-1"># 下沉调整 (Bubble Down)</div>
+                    <div id="c-down-def" class="code-line">def bubble_down(idx):</div>
+                    <div id="c-down-loop" class="code-line pl-6">while True:</div>
+                    <div id="c-down-vars" class="code-line pl-10 text-slate-500">l, r = 2*idx+1, 2*idx+2</div>
+                    <div id="c-down-small" class="code-line pl-10 text-slate-500">small = idx</div>
+                    
+                    <div id="c-down-check-l" class="code-line pl-10">if l < len and h[l] < h[small]:</div>
+                    <div class="code-line pl-14">small = l</div>
+                    
+                    <div id="c-down-check-r" class="code-line pl-10">if r < len and h[r] < h[small]:</div>
+                    <div class="code-line pl-14">small = r</div>
+
+                    <div id="c-down-compare" class="code-line pl-10">if small != idx:</div>
+                    <div id="c-down-swap" class="code-line pl-14">swap(idx, small)</div>
+                    <div id="c-down-next" class="code-line pl-14">idx = small</div>
+                    <div id="c-down-break" class="code-line pl-10">else: break</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Resizer Left -->
+        <div id="resizer-left" class="resizer"></div>
+
+        <!-- CENTER: Visualization -->
+        <main class="flex-1 flex flex-col bg-slate-50 relative overflow-hidden min-w-[200px]">
+            
+            <!-- Canvas -->
+            <div class="flex-1 relative bg-slate-50 overflow-hidden cursor-move select-none" id="canvas-container">
+                <svg id="heap-svg" width="100%" height="100%" class="absolute top-0 left-0 block">
+                    <g id="viewport-group">
+                        <g id="links-layer"></g>
+                        <g id="nodes-layer"></g>
+                    </g>
+                </svg>
+                
+                <!-- Legend Overlay -->
+                <div class="absolute top-4 left-4 bg-white/90 backdrop-blur p-2 rounded-lg border border-slate-200 shadow-sm text-[10px] space-y-1 pointer-events-none">
+                    <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-blue-500"></div><span>节点 (Node)</span></div>
+                    <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-amber-500"></div><span>比较中 (Compare)</span></div>
+                    <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-emerald-500"></div><span>交换 (Swap)</span></div>
+                </div>
+            </div>
+
+            <!-- Resizer Bottom -->
+            <div id="resizer-bottom" class="resizer-h"></div>
+
+            <!-- Bottom: Array Storage (Enhanced) -->
+            <div id="bottom-panel" class="bg-white border-t border-slate-200 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 flex-shrink-0" style="height: 180px;">
+                <div class="flex items-center justify-between py-2 border-b border-slate-100 px-6">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-2">
+                        <i data-lucide="database" class="w-3 h-3"></i> 底层数组存储 (Underlying Array)
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-mono">Index: 0...N</span>
+                </div>
+                <div id="array-view" class="flex-1 flex flex-wrap content-start gap-x-2 overflow-y-auto custom-scrollbar py-2 pl-6">
+                    <!-- Array items injected here -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Resizer Right -->
+        <div id="resizer-right" class="resizer"></div>
+
+        <!-- RIGHT: Controls -->
+        <aside id="right-panel" class="bg-white border-l border-slate-200 flex flex-col z-10 shadow-xl" style="width: 300px;">
+            <div class="p-5 bg-slate-50 border-b border-slate-100">
+                <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">操作面板</h2>
+
+                <!-- Reset -->
+                <div class="mb-6">
+                    <button id="btn-reset" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 px-3 py-2 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-sm">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> 重置 (Reset)
+                    </button>
+                </div>
+                
+                <!-- Insert -->
+                <div class="mb-6">
+                    <label class="text-xs font-bold text-slate-700 block mb-2">插入 (Push)</label>
+                    <div class="flex gap-2 mb-2">
+                        <div class="relative flex-1">
+                            <input type="number" id="input-val" class="w-full pl-3 pr-9 py-1.5 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Dist" min="1" max="99">
+                            <button id="btn-random" class="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 transition-colors" title="随机生成">
+                                <i data-lucide="dice-5" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <button id="btn-insert" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-sm">
+                            <i data-lucide="plus" class="w-3 h-3"></i> 插入
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Extract -->
+                <div>
+                    <label class="text-xs font-bold text-slate-700 block mb-2">取出 (Pop)</label>
+                    <button id="btn-extract" class="w-full bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-sm">
+                        <i data-lucide="upload" class="w-4 h-4"></i> 取出最小值 (Extract Min)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Log -->
+            <div class="flex-1 flex flex-col min-h-0 bg-white">
+                <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">执行日志</span>
+                    <button id="btn-clear-log" class="text-[10px] text-slate-400 hover:text-blue-600">清空</button>
+                </div>
+                <div id="log-container" class="flex-1 overflow-y-auto p-4 space-y-2 mono text-xs">
+                    <div class="text-slate-400 italic">准备就绪...</div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // --- VISUALIZATION ENGINE ---
+        const svg = document.getElementById('heap-svg');
+        const viewportGroup = document.getElementById('viewport-group'); 
+        const linksLayer = document.getElementById('links-layer');
+        const nodesLayer = document.getElementById('nodes-layer');
+        const arrayView = document.getElementById('array-view');
+        const logContainer = document.getElementById('log-container');
+
+        // View State
+        let viewState = { scale: 1, x: 0, y: 0 };
+        let isDragging = false;
+        let lastMouse = { x: 0, y: 0 };
+
+        // --- RESIZING LOGIC ---
+        const resizerLeft = document.getElementById('resizer-left');
+        const resizerRight = document.getElementById('resizer-right');
+        const resizerBottom = document.getElementById('resizer-bottom');
+        
+        const leftPanel = document.getElementById('left-panel');
+        const rightPanel = document.getElementById('right-panel');
+        const bottomPanel = document.getElementById('bottom-panel');
+
+        function initResizers() {
+            // Horizontal Resizers
+            const createResizerH = (resizer, panel, isLeft) => {
+                let isResizing = false;
+                resizer.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    document.body.style.cursor = 'col-resize';
+                    resizer.classList.add('resizing');
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    e.preventDefault();
+                    if (isLeft) {
+                        const newWidth = Math.max(200, Math.min(600, e.clientX));
+                        panel.style.width = `${newWidth}px`;
+                    } else {
+                        const newWidth = Math.max(200, Math.min(600, window.innerWidth - e.clientX));
+                        panel.style.width = `${newWidth}px`;
+                    }
+                });
+
+                document.addEventListener('mouseup', () => {
+                    if (isResizing) {
+                        isResizing = false;
+                        document.body.style.cursor = '';
+                        resizer.classList.remove('resizing');
+                    }
+                });
+            };
+
+            // Vertical Resizer
+            const createResizerV = (resizer, panel) => {
+                let isResizing = false;
+                resizer.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    document.body.style.cursor = 'row-resize';
+                    resizer.classList.add('resizing');
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    e.preventDefault();
+                    const newHeight = Math.max(100, Math.min(600, window.innerHeight - e.clientY));
+                    panel.style.height = `${newHeight}px`;
+                });
+
+                document.addEventListener('mouseup', () => {
+                    if (isResizing) {
+                        isResizing = false;
+                        document.body.style.cursor = '';
+                        resizer.classList.remove('resizing');
+                    }
+                });
+            };
+
+            createResizerH(resizerLeft, leftPanel, true);
+            createResizerH(resizerRight, rightPanel, false);
+            createResizerV(resizerBottom, bottomPanel);
+        }
+
+        // --- ANIMATION HELPERS ---
+        function getNodePos(idx) {
+            const node = document.getElementById(`node-${idx}`);
+            if (!node) return null;
+            const transform = node.getAttribute('transform');
+            const match = /translate\(([^,]+),\s*([^)]+)\)/.exec(transform);
+            return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : null;
+        }
+
+        async function animateSwap(idx1, idx2) {
+            const n1 = document.getElementById(`node-${idx1}`);
+            const n2 = document.getElementById(`node-${idx2}`);
+            if (!n1 || !n2) return;
+
+            const pos1 = getNodePos(idx1);
+            const pos2 = getNodePos(idx2);
+            if (!pos1 || !pos2) return;
+
+            // Bring to front
+            const parent = n1.parentNode;
+            parent.appendChild(n1);
+            parent.appendChild(n2);
+
+            const animOpts = { duration: 400, easing: 'ease-in-out', fill: 'forwards' };
+
+            const a1 = n1.animate([
+                { transform: `translate(${pos1.x}px, ${pos1.y}px)` },
+                { transform: `translate(${pos2.x}px, ${pos2.y}px)` }
+            ], animOpts);
+
+            const a2 = n2.animate([
+                { transform: `translate(${pos2.x}px, ${pos2.y}px)` },
+                { transform: `translate(${pos1.x}px, ${pos1.y}px)` }
+            ], animOpts);
+
+            await Promise.all([a1.finished, a2.finished]);
+        }
+
+        async function animateMoveTo(fromIdx, toIdx) {
+            const nFrom = document.getElementById(`node-${fromIdx}`);
+            const nTargetRef = document.getElementById(`node-${toIdx}`); // The node currently at target position
+            
+            if (!nFrom) return;
+            
+            const startPos = getNodePos(fromIdx);
+            // We use the position of the target node (which is about to be replaced)
+            const endPos = getNodePos(toIdx);
+            
+            if (!endPos) return;
+
+            // Bring moving node to front
+            const parent = nFrom.parentNode;
+            parent.appendChild(nFrom); 
+
+            // Animate
+            const anim = nFrom.animate([
+                { transform: `translate(${startPos.x}px, ${startPos.y}px)` },
+                { transform: `translate(${endPos.x}px, ${endPos.y}px)` }
+            ], { duration: 500, easing: 'ease-in-out', fill: 'forwards' });
+
+            await anim.finished;
+        }
+
+        // --- HEAP LOGIC ---
+        class MinHeap {
+            constructor() {
+                this.heap = [];
+                // Initial Data
+                [10, 30, 20, 35, 40, 50, 25].forEach(v => this.heap.push(v));
+                this.heap.sort((a,b) => a-b);
+            }
+
+            getParentIndex(i) { return Math.floor((i - 1) / 2); }
+            getLeftChildIndex(i) { return 2 * i + 1; }
+            getRightChildIndex(i) { return 2 * i + 2; }
+
+            async insert(value) {
+                highlightCode('c-insert-def');
+                log(`尝试插入: ${value}`, 'text-blue-600');
+                
+                highlightCode('c-insert-append');
+                this.heap.push(value);
+                await render();
+                await sleep(500);
+
+                highlightCode('c-insert-bubble');
+                await this.bubbleUp();
+                log(`插入完成`, 'text-green-600 font-bold');
+                highlightCode(null);
+            }
+
+            async bubbleUp() {
+                highlightCode('c-up-def');
+                let index = this.heap.length - 1;
+                
+                while (true) {
+                    highlightCode('c-up-loop');
+                    if (index <= 0) break;
+
+                    let parentIndex = this.getParentIndex(index);
+                    highlightCode('c-up-parent');
+                    
+                    highlightNodes([index, parentIndex], 'highlight-compare');
+                    log(`比较: 当前[${this.heap[index]}] < 父节点[${this.heap[parentIndex]}]?`);
+                    highlightCode('c-up-compare');
+                    await sleep(800);
+
+                    if (this.heap[index] < this.heap[parentIndex]) {
+                        log(`交换: ${this.heap[index]} 上浮`, 'text-emerald-600');
+                        highlightCode('c-up-swap');
+                        
+                        highlightNodes([index, parentIndex], 'highlight-swap');
+                        // Animate visual swap first
+                        await animateSwap(index, parentIndex);
+                        
+                        // Then swap data
+                        [this.heap[index], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[index]];
+                        await render(); // Re-render to snap to grid and update edges
+                        
+                        highlightNodes([index, parentIndex], 'highlight-swap'); 
+                        await sleep(300);
+                        
+                        index = parentIndex;
+                        highlightCode('c-up-next');
+                    } else {
+                        log(`位置正确`, 'text-slate-400');
+                        highlightCode('c-up-break');
+                        clearHighlights();
+                        break;
+                    }
+                }
+                clearHighlights();
+            }
+
+            async extractMin() {
+                highlightCode('c-pop-def');
+                if (this.heap.length === 0) {
+                    highlightCode('c-pop-empty');
+                    log(`堆为空`, 'text-red-500');
+                    return;
+                }
+
+                highlightCode('c-pop-root');
+                const min = this.heap[0];
+                log(`提取最小值: ${min}`, 'text-amber-600 font-bold');
+                highlightNodes([0], 'highlight-target');
+                await sleep(800);
+
+                if (this.heap.length === 1) {
+                    this.heap.pop();
+                    await render();
+                    highlightCode(null);
+                    return;
+                }
+
+                highlightCode('c-pop-move');
+                const lastIdx = this.heap.length - 1;
+                const lastVal = this.heap[lastIdx];
+                
+                // Visually fade out root
+                const rootNode = document.getElementById('node-0');
+                if (rootNode) {
+                    rootNode.classList.add('fade-out');
+                }
+                await sleep(300);
+
+                log(`移动末尾节点 [${lastVal}] 到根部`, 'text-slate-500');
+                // Animate move from last to 0
+                await animateMoveTo(lastIdx, 0);
+
+                // Logic update
+                this.heap[0] = this.heap.pop();
+                await render();
+                
+                highlightCode('c-pop-bubble');
+                await this.bubbleDown();
+                
+                highlightCode('c-pop-ret');
+                log(`提取完成`, 'text-green-600 font-bold');
+                highlightCode(null);
+            }
+
+            async bubbleDown() {
+                highlightCode('c-down-def');
+                let index = 0;
+                while (true) {
+                    highlightCode('c-down-loop');
+                    let leftIndex = this.getLeftChildIndex(index);
+                    let rightIndex = this.getRightChildIndex(index);
+                    let smallest = index;
+
+                    // Visualize candidates
+                    highlightCode('c-down-vars');
+                    highlightCode('c-down-small');
+                    let candidates = [index];
+                    if(leftIndex < this.heap.length) candidates.push(leftIndex);
+                    if(rightIndex < this.heap.length) candidates.push(rightIndex);
+                    
+                    highlightNodes(candidates, 'highlight-compare');
+                    if (candidates.length > 1) {
+                        log(`比较父节点与子节点...`);
+                        await sleep(800);
+                    }
+
+                    highlightCode('c-down-check-l');
+                    if (leftIndex < this.heap.length && this.heap[leftIndex] < this.heap[smallest]) {
+                        smallest = leftIndex;
+                    }
+                    highlightCode('c-down-check-r');
+                    if (rightIndex < this.heap.length && this.heap[rightIndex] < this.heap[smallest]) {
+                        smallest = rightIndex;
+                    }
+
+                    highlightCode('c-down-compare');
+                    if (smallest !== index) {
+                        log(`交换: ${this.heap[index]} 下沉`, 'text-emerald-600');
+                        highlightCode('c-down-swap');
+                        
+                        highlightNodes([index, smallest], 'highlight-swap');
+                        // Animate visual swap
+                        await animateSwap(index, smallest);
+
+                        [this.heap[index], this.heap[smallest]] = [this.heap[smallest], this.heap[index]];
+                        await render();
+                        
+                        highlightNodes([index, smallest], 'highlight-swap');
+                        await sleep(300);
+                        
+                        index = smallest;
+                        highlightCode('c-down-next');
+                    } else {
+                        highlightCode('c-down-break');
+                        log(`堆性质已恢复`, 'text-slate-400');
+                        clearHighlights();
+                        break;
+                    }
+                }
+                clearHighlights();
+            }
+        }
+
+        let heap = new MinHeap(); 
+
+        // --- RENDERERS ---
+
+        async function render() {
+            // 1. Array Render
+            arrayView.innerHTML = '';
+            heap.heap.forEach((val, i) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex flex-col items-center flex-shrink-0 mb-2'; 
+                wrapper.id = `arr-${i}`;
+                
+                const box = document.createElement('div');
+                box.className = `array-box w-10 h-10 border border-slate-300 rounded bg-white flex items-center justify-center text-sm font-mono font-bold text-slate-700 shadow-sm`;
+                box.innerText = val;
+                
+                const idx = document.createElement('div');
+                idx.className = 'text-[9px] text-slate-400 mt-1 font-mono';
+                idx.innerText = i;
+                
+                wrapper.append(box, idx);
+                arrayView.appendChild(wrapper);
+            });
+
+            // 2. SVG Tree Render
+            linksLayer.innerHTML = '';
+            nodesLayer.innerHTML = '';
+            
+            if (heap.heap.length === 0) return;
+
+            // Simple Layout Calculation
+            const levelHeight = 80;
+            // Dynamic width based on depth
+            const depth = Math.floor(Math.log2(heap.heap.length));
+            const baseWidth = Math.max(800, Math.pow(2, depth) * 60); 
+            
+            // Helper to get coordinates
+            const getCoords = (i) => {
+                const level = Math.floor(Math.log2(i + 1));
+                const indexInLevel = (i + 1) - Math.pow(2, level);
+                const levelNodes = Math.pow(2, level);
+                
+                // Effective width for this level
+                const slice = baseWidth / levelNodes;
+                // Center in slice
+                const x = (indexInLevel * slice) + (slice / 2) - (baseWidth / 2);
+                const y = level * levelHeight + 50;
+                return { x, y }; // x is relative to center 0
+            };
+
+            // Center the whole tree in the view
+            const rootX = 400; // Visual center offset
+
+            // Draw Links first
+            heap.heap.forEach((_, i) => {
+                if (i === 0) return;
+                const parentIdx = Math.floor((i - 1) / 2);
+                const p = getCoords(parentIdx);
+                const c = getCoords(i);
+                
+                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                line.setAttribute("x1", p.x + rootX);
+                line.setAttribute("y1", p.y);
+                line.setAttribute("x2", c.x + rootX);
+                line.setAttribute("y2", c.y);
+                line.setAttribute("stroke", "#cbd5e1");
+                line.setAttribute("stroke-width", "2");
+                linksLayer.appendChild(line);
+            });
+
+            // Draw Nodes
+            heap.heap.forEach((val, i) => {
+                const pos = getCoords(i);
+                
+                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                g.setAttribute("transform", `translate(${pos.x + rootX}, ${pos.y})`);
+                g.setAttribute("id", `node-${i}`);
+                
+                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                circle.setAttribute("r", "18");
+                circle.setAttribute("class", "node-circle");
+                
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("class", "node-text");
+                text.setAttribute("y", "1"); // vertical adjust
+                text.textContent = val;
+                
+                const idxLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                idxLabel.setAttribute("y", "-24");
+                idxLabel.setAttribute("class", "text-[9px] fill-slate-400 font-mono pointer-events-none");
+                idxLabel.setAttribute("text-anchor", "middle");
+                idxLabel.textContent = i;
+
+                g.appendChild(circle);
+                g.appendChild(text);
+                g.appendChild(idxLabel);
+                nodesLayer.appendChild(g);
+            });
+        }
+
+        // --- INTERACTION ---
+
+        // Pan & Zoom
+        const container = document.getElementById('canvas-container');
+        
+        function updateTransform() {
+            viewportGroup.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.scale})`);
+        }
+
+        container.addEventListener('mousedown', e => {
+            isDragging = true;
+            lastMouse = { x: e.clientX, y: e.clientY };
+            container.style.cursor = 'grabbing';
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            const dx = e.clientX - lastMouse.x;
+            const dy = e.clientY - lastMouse.y;
+            viewState.x += dx;
+            viewState.y += dy;
+            lastMouse = { x: e.clientX, y: e.clientY };
+            updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            container.style.cursor = 'move';
+        });
+
+        container.addEventListener('wheel', e => {
+            e.preventDefault();
+            const s = Math.exp(-e.deltaY * 0.001);
+            viewState.scale = Math.min(Math.max(0.1, viewState.scale * s), 5);
+            updateTransform();
+        });
+
+        // Highlights
+        function highlightNodes(indices, className) {
+            clearHighlights();
+            indices.forEach(i => {
+                const node = document.getElementById(`node-${i}`);
+                const arrBox = document.getElementById(`arr-${i}`)?.querySelector('.array-box');
+                
+                if (node) {
+                    node.querySelector('circle').classList.add(className);
+                }
+                if (arrBox) {
+                    if (className.includes('compare')) arrBox.classList.add('border-amber-400', 'bg-amber-50');
+                    if (className.includes('swap')) arrBox.classList.add('border-emerald-400', 'bg-emerald-50');
+                    if (className.includes('target')) arrBox.classList.add('border-red-400', 'bg-red-50');
+                    arrBox.classList.add('active');
+                }
+            });
+        }
+
+        function highlightCode(lineId) {
+            document.querySelectorAll('.code-active').forEach(el => el.classList.remove('code-active'));
+            if (lineId) {
+                const el = document.getElementById(lineId);
+                if (el) {
+                    el.classList.add('code-active');
+                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.node-circle').forEach(el => {
+                el.classList.remove('highlight-compare', 'highlight-swap', 'highlight-target');
+            });
+            document.querySelectorAll('.array-box').forEach(el => {
+                el.className = `array-box w-10 h-10 border border-slate-300 rounded bg-white flex items-center justify-center text-sm font-mono font-bold text-slate-700 shadow-sm`;
+            });
+        }
+
+        function log(msg, cls = "") {
+            const div = document.createElement('div');
+            div.className = `${cls} border-l-2 border-transparent hover:border-slate-200 pl-2 py-0.5`;
+            div.innerHTML = `<span class="opacity-40 text-[9px] mr-2 font-mono">${new Date().toLocaleTimeString().split(' ')[0]}</span>${msg}`;
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        // --- BINDINGS ---
+        const btnInsert = document.getElementById('btn-insert');
+        const btnExtract = document.getElementById('btn-extract');
+        const btnRandom = document.getElementById('btn-random');
+        const btnClear = document.getElementById('btn-clear-log');
+        const btnReset = document.getElementById('btn-reset');
+        const inputVal = document.getElementById('input-val');
+
+        let isProcessing = false;
+
+        async function runOp(fn) {
+            if (isProcessing) return;
+            isProcessing = true;
+            btnInsert.disabled = true;
+            btnExtract.disabled = true;
+            btnRandom.disabled = true;
+            btnReset.disabled = true;
+            
+            try { await fn(); } 
+            catch(e) { console.error(e); } 
+            finally {
+                isProcessing = false;
+                btnInsert.disabled = false;
+                btnExtract.disabled = false;
+                btnRandom.disabled = false;
+                btnReset.disabled = false;
+            }
+        }
+
+        btnInsert.onclick = () => runOp(async () => {
+            let val = parseInt(inputVal.value);
+            if (isNaN(val)) val = Math.floor(Math.random() * 90) + 5;
+            await heap.insert(val);
+            inputVal.value = '';
+        });
+
+        btnRandom.onclick = () => {
+            inputVal.value = Math.floor(Math.random() * 90) + 5;
+        };
+
+        btnExtract.onclick = () => runOp(async () => {
+            await heap.extractMin();
+        });
+
+        btnReset.onclick = () => {
+            if (isProcessing) return;
+            heap = new MinHeap(); // Re-initialize
+            logContainer.innerHTML = '<div class="text-slate-400 italic">准备就绪...</div>';
+            highlightCode(null);
+            clearHighlights();
+            render();
+            log("系统已重置", "text-slate-400 font-bold");
+        }
+
+        btnClear.onclick = () => {
+            logContainer.innerHTML = '<div class="text-slate-400 italic">准备就绪...</div>';
+        }
+
+        // Init
+        lucide.createIcons();
+        initResizers();
+        render();
+
+    </script>
+</body>
+</html>
