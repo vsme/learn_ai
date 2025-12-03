@@ -1,4 +1,85 @@
-<!DOCTYPE html>
+import os
+import re
+from datetime import datetime
+
+# Configuration
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_FILE = os.path.join(ROOT_DIR, 'index.html')
+IGNORE_DIRS = {'.git', '.vscode', '__pycache__', 'templates', 'assets', 'css', 'js', 'images'}
+IGNORE_FILES = {'index.html'}
+
+def extract_metadata(file_path):
+    """Extract title, description, order and icon from an HTML file."""
+    title = "Untitled"
+    description = "No description available."
+    order = 9999
+    icon = None
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+            # Extract Title
+            title_match = re.search(r'<title>(.*?)</title>', content, re.IGNORECASE | re.DOTALL)
+            if title_match:
+                title = title_match.group(1).strip()
+            
+            # Extract Description (Meta tag)
+            desc_match = re.search(r'<meta\s+name=["\']description["\']\s+content=["\'](.*?)["\']', content, re.IGNORECASE)
+            if desc_match:
+                description = desc_match.group(1).strip()
+            
+            # Extract Order
+            order_match = re.search(r'<!--\s*order:\s*(\d+)\s*-->', content, re.IGNORECASE)
+            if order_match:
+                order = int(order_match.group(1))
+
+            # Extract Icon
+            icon_match = re.search(r'<!--\s*icon:\s*(.+?)\s*-->', content, re.IGNORECASE)
+            if icon_match:
+                icon = icon_match.group(1).strip()
+
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+        
+    return {
+        'title': title,
+        'description': description,
+        'order': order,
+        'icon': icon,
+        'path': file_path
+    }
+
+def scan_directory(root_path):
+    """Scan the directory for HTML files grouped by folders."""
+    categories = {}
+    
+    for entry in os.listdir(root_path):
+        full_path = os.path.join(root_path, entry)
+        
+        if os.path.isdir(full_path) and entry not in IGNORE_DIRS:
+            category_name = entry.upper() # Or format nicely
+            modules = []
+            
+            for file in os.listdir(full_path):
+                if file.endswith('.html') and file not in IGNORE_FILES:
+                    file_path = os.path.join(full_path, file)
+                    rel_path = os.path.relpath(file_path, root_path).replace('\\', '/')
+                    
+                    metadata = extract_metadata(file_path)
+                    metadata['rel_path'] = rel_path
+                    modules.append(metadata)
+            
+            if modules:
+                categories[category_name] = modules
+                
+    return categories
+
+def generate_html(categories):
+    """Generate the index.html content."""
+    
+    # Template parts
+    html_head = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -195,62 +276,9 @@
     </header>
 
     <main>
+"""
 
-        <section class="category-section">
-            <h2 class="category-title">
-                RAG
-                <span class="category-badge">5 Modules</span>
-            </h2>
-            <div class="modules-grid">
-        
-                <a href="rag/k-means.html" class="card">
-                    <div class="card-icon">🧠</div>
-                    <h3>K-Means++ 算法可视化</h3>
-                    <p>可视化展示 K-Means++ 算法的运行过程，帮助理解聚类过程和选择初始聚类中心的重要性。</p>
-                    <div class="card-footer">
-                        <span>View Module &rarr;</span>
-                    </div>
-                </a>
-            
-                <a href="rag/nvf-flat.html" class="card">
-                    <div class="card-icon">🔍</div>
-                    <h3>IVF_FLAT 算法</h3>
-                    <p>可视化展示 IVF_FLAT 算法的运行过程，帮助理解索引构建和查询过程。</p>
-                    <div class="card-footer">
-                        <span>View Module &rarr;</span>
-                    </div>
-                </a>
-            
-                <a href="rag/langchain-text-splitter.html" class="card">
-                    <div class="card-icon">📝</div>
-                    <h3>Recursive TextSplitter</h3>
-                    <p>展示 LangChain 递归文本分割算法的工作原理，帮助理解如何将长文本递归地分割为多个子文本块。</p>
-                    <div class="card-footer">
-                        <span>View Module &rarr;</span>
-                    </div>
-                </a>
-            
-                <a href="rag/semantic-chunker.html" class="card">
-                    <div class="card-icon">🧩</div>
-                    <h3>Semantic Chunker</h3>
-                    <p>展示 Semantic Chunker 语义分块算法的工作原理，帮助理解如何根据语义将文本递归地分割为多个子文本块。</p>
-                    <div class="card-footer">
-                        <span>View Module &rarr;</span>
-                    </div>
-                </a>
-            
-                <a href="rag/min-heap.html" class="card">
-                    <div class="card-icon">🔢</div>
-                    <h3>HNSW 最小堆 (Min-Heap)</h3>
-                    <p>可视化展示 HNSW 最小堆的结构和操作，帮助理解图搜索算法中优先队列的实现。</p>
-                    <div class="card-footer">
-                        <span>View Module &rarr;</span>
-                    </div>
-                </a>
-            
-            </div>
-        </section>
-        
+    html_footer = """
     </main>
 
     <footer>
@@ -259,3 +287,84 @@
 
 </body>
 </html>
+"""
+    
+    content_html = ""
+    
+    # Sort categories
+    sorted_categories = sorted(categories.keys())
+    
+    for category in sorted_categories:
+        modules = categories[category]
+        
+        # Sort modules by order (ascending) then title
+        modules.sort(key=lambda x: (x['order'], x['title']))
+        
+        content_html += f"""
+        <section class="category-section">
+            <h2 class="category-title">
+                {category}
+                <span class="category-badge">{len(modules)} Modules</span>
+            </h2>
+            <div class="modules-grid">
+        """
+        
+        for module in modules:
+            title = module['title']
+            desc = module['description']
+            link = module['rel_path']
+            extracted_icon = module['icon']
+            
+            # Icon logic: Extracted > Keyword > Default
+            if extracted_icon:
+                icon = extracted_icon
+            else:
+                # Basic icon logic based on keywords
+                icon = "📄"
+                if "RAG" in title.upper(): icon = "🧠"
+                elif "SEARCH" in title.upper() or "检索" in title: icon = "🔍"
+                elif "SPLITTER" in title.upper(): icon = "✂️"
+                elif "HEAP" in title.upper(): icon = "🌲"
+                elif "K-MEANS" in title.upper(): icon = "📊"
+            
+            content_html += f"""
+                <a href="{link}" class="card">
+                    <div class="card-icon">{icon}</div>
+                    <h3>{title}</h3>
+                    <p>{desc if desc != "No description available." else "点击查看详情"}</p>
+                    <div class="card-footer">
+                        <span>View Module &rarr;</span>
+                    </div>
+                </a>
+            """
+            
+        content_html += """
+            </div>
+        </section>
+        """
+
+    if not categories:
+        content_html += """
+        <div style="text-align: center; padding: 4rem; color: var(--text-secondary);">
+            <h2>No modules found</h2>
+            <p>Add folders with HTML files to get started.</p>
+        </div>
+        """
+
+    return html_head + content_html + html_footer
+
+def main():
+    print("Scanning directory...")
+    categories = scan_directory(ROOT_DIR)
+    print(f"Found {len(categories)} categories.")
+    
+    print("Generating index.html...")
+    html_content = generate_html(categories)
+    
+    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+        
+    print(f"Successfully generated {OUTPUT_FILE}")
+
+if __name__ == "__main__":
+    main()
