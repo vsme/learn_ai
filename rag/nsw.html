@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- order: 6 -->
     <!-- icon: 🔎 -->
-    <title>HNSW 算法核心原理可视化</title>
-    <meta name="description" content="可视化展示 HNSW 算法的核心原理，帮助理解高维向量的索引构建和查询过程。">  
+    <title>NSW 核心原理</title>
+    <meta name="description" content="可视化展示 NSW 算法的核心原理，帮助理解高维向量的索引构建和查询过程。">  
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -49,6 +49,28 @@
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
+
+        /* Resizers */
+        .resizer-v {
+            width: 4px;
+            background-color: #cbd5e1;
+            cursor: col-resize;
+            transition: background-color 0.2s;
+            z-index: 50;
+            flex-shrink: 0;
+        }
+        .resizer-v:hover, .resizer-v.resizing { background-color: #3b82f6; }
+
+        .resizer-h {
+            height: 4px;
+            background-color: #cbd5e1;
+            cursor: row-resize;
+            transition: background-color 0.2s;
+            z-index: 50;
+            flex-shrink: 0;
+            width: 100%;
+        }
+        .resizer-h:hover, .resizer-h.resizing { background-color: #3b82f6; }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden text-slate-800">
@@ -60,7 +82,7 @@
                 <i data-lucide="network" class="w-5 h-5"></i>
             </div>
             <div>
-                <h1 class="text-lg font-bold text-slate-800 leading-none">HNSW (NSW) 算法可视化</h1>
+                <h1 class="text-lg font-bold text-slate-800 leading-none">NSW 算法可视化</h1>
                 <div class="text-[10px] text-slate-500 mt-0.5">增量建图 (Add) 与 贪心搜索 (Search)</div>
             </div>
         </div>
@@ -70,18 +92,18 @@
         </div>
     </header>
 
-    <div class="flex-1 flex overflow-hidden">
+    <div class="flex-1 flex overflow-hidden" id="main-container">
         
         <!-- LEFT: Code Panel -->
-        <aside class="w-[450px] bg-[#1e293b] flex flex-col border-r border-slate-700 z-10 shadow-lg text-slate-300 transition-all">
-            <div class="px-4 py-3 border-b border-slate-700 bg-[#0f172a] flex justify-between items-center">
+        <aside id="left-panel" class="bg-[#1e293b] flex flex-col border-r border-slate-700 z-10 shadow-lg text-slate-300" style="width: 450px; min-width: 300px;">
+            <div class="px-4 py-3 border-b border-slate-700 bg-[#0f172a] flex justify-between items-center flex-shrink-0">
                 <h2 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <i data-lucide="code" class="w-3 h-3"></i> 核心代码逻辑
                 </h2>
                 <span id="code-mode-label" class="text-[10px] px-2 py-0.5 rounded bg-blue-900 text-blue-200 border border-blue-700">建图模式</span>
             </div>
             
-            <div class="flex-1 overflow-auto py-4 mono text-[11px] leading-relaxed custom-scrollbar relative">
+            <div class="flex-1 overflow-auto py-4 mono text-[11px] leading-relaxed custom-scrollbar relative" id="code-area">
                 
                 <!-- Code: Add Items (Expanded Search Logic) -->
                 <div id="code-group-build">
@@ -114,7 +136,7 @@
                     <div id="ln-add-conn" class="code-line pl-8"><span class="text-pink-400">for</span> nb <span class="text-pink-400">in</span> neighbors: connect(vec, nb)</div>
                 </div>
 
-                <!-- Code: Search (Same Logic, Different Context) -->
+                <!-- Code: Search -->
                 <div id="code-group-search" class="hidden">
                     <div id="ln-q-def" class="code-line"><span class="text-pink-400">def</span> <span class="text-blue-300">knn_query</span>(self, query, k):</div>
                     <div class="code-line pl-4 text-slate-500"># 搜索逻辑与建图几乎一致，只是不建立连接</div>
@@ -137,20 +159,26 @@
 
             </div>
             
+            <!-- Resizer H: Code vs Log -->
+            <div id="resizer-left-split" class="resizer-h border-t border-slate-700 bg-[#1e293b]"></div>
+
             <!-- Logger -->
-            <div class="h-40 bg-[#0f172a] border-t border-slate-700 flex flex-col">
-                <div class="px-3 py-1 text-[10px] text-slate-500 uppercase font-bold bg-[#1e293b]">执行日志</div>
-                <div id="log-container" class="flex-1 overflow-y-auto p-2 mono text-[10px] text-slate-400 space-y-1">
+            <div id="log-panel" class="bg-[#0f172a] flex flex-col min-h-[100px]" style="height: 160px;">
+                <div class="px-3 py-1 text-[10px] text-slate-500 uppercase font-bold bg-[#1e293b] border-b border-slate-700 flex-shrink-0">执行日志</div>
+                <div id="log-container" class="flex-1 overflow-y-auto p-2 mono text-[10px] text-slate-400 space-y-1 custom-scrollbar">
                     <div class="italic">等待操作...</div>
                 </div>
             </div>
         </aside>
 
+        <!-- Resizer V: Left vs Center -->
+        <div id="resizer-col-1" class="resizer-v"></div>
+
         <!-- CENTER: Canvas -->
-        <main class="flex-1 relative bg-slate-50 overflow-hidden">
+        <main class="flex-1 relative bg-slate-50 overflow-hidden min-w-[300px]">
             <canvas id="main-canvas" class="block w-full h-full"></canvas>
             
-            <!-- Pruning Indicator (Visual feedback) -->
+            <!-- Pruning Indicator -->
             <div id="prune-indicator" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-0 transition-opacity duration-300 flex flex-col items-center">
                 <div class="bg-red-500 text-white rounded-full p-2 shadow-lg">
                     <i data-lucide="scissors" class="w-6 h-6"></i>
@@ -158,7 +186,7 @@
                 <span class="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded mt-1 border border-red-200">Pruned / Break</span>
             </div>
 
-            <!-- Canvas Overlay (Legend) -->
+            <!-- Canvas Overlay -->
             <div class="absolute bottom-4 right-4 bg-white/90 backdrop-blur px-3 py-2 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-2 pointer-events-none select-none">
                 <div class="text-[10px] font-bold text-slate-500 uppercase mb-1">图例</div>
                 <div class="flex items-center gap-2 text-xs text-slate-600"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 已访问/计算 (Visited)</div>
@@ -170,14 +198,18 @@
             </div>
         </main>
 
+        <!-- Resizer V: Center vs Right -->
+        <div id="resizer-col-2" class="resizer-v"></div>
+
         <!-- RIGHT: Controls & Data -->
-        <aside class="w-[340px] bg-white border-l border-slate-200 flex flex-col z-10 shadow-xl">
+        <aside id="right-panel" class="bg-white border-l border-slate-200 flex flex-col z-10 shadow-xl" style="width: 340px; min-width: 280px;">
             
-            <!-- 1. Top Controls -->
-            <div class="p-4 bg-slate-50 border-b border-slate-200 space-y-4">
+            <!-- 1. Top Controls (Fixed Height Content) -->
+            <div class="p-4 bg-slate-50 border-b border-slate-200 space-y-4 flex-shrink-0">
                 
                 <!-- Mode Switcher -->
                 <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-2">当前模式</label>
                     <div class="flex bg-white border border-slate-300 rounded overflow-hidden">
                         <button id="btn-mode-build" class="flex-1 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 transition-colors">
                             <i data-lucide="plus-circle" class="w-3 h-3 inline mr-1"></i> 建图
@@ -192,15 +224,15 @@
                 <!-- Parameters Form -->
                 <div class="grid grid-cols-3 gap-2">
                     <div>
-                        <label class="text-[10px] font-bold text-slate-500 block mb-1" title="每个节点最大邻居数">M (Neighbors)</label>
+                        <label class="text-[10px] font-bold text-slate-500 block mb-1">M (Neighbors)</label>
                         <input type="number" id="input-m" value="3" min="1" max="6" class="w-full px-1 py-1 text-xs border border-slate-300 rounded text-center focus:ring-1 focus:ring-indigo-500 outline-none">
                     </div>
                     <div>
-                        <label class="text-[10px] font-bold text-slate-500 block mb-1" title="搜索时的候选队列大小">ef (Search)</label>
+                        <label class="text-[10px] font-bold text-slate-500 block mb-1">ef (Search)</label>
                         <input type="number" id="input-ef" value="6" min="1" max="20" class="w-full px-1 py-1 text-xs border border-slate-300 rounded text-center focus:ring-1 focus:ring-indigo-500 outline-none">
                     </div>
                     <div>
-                        <label class="text-[10px] font-bold text-slate-500 block mb-1" title="返回的最优结果数量">Top K</label>
+                        <label class="text-[10px] font-bold text-slate-500 block mb-1">Top K</label>
                         <input type="number" id="input-k" value="3" min="1" max="10" class="w-full px-1 py-1 text-xs border border-slate-300 rounded text-center focus:ring-1 focus:ring-indigo-500 outline-none">
                     </div>
                 </div>
@@ -226,9 +258,9 @@
                 </div>
             </div>
 
-            <!-- 2. Result List (Best Candidates) MOVED UP -->
-            <div class="flex-1 flex flex-col border-b border-slate-100 min-h-0">
-                <div class="px-4 py-2 bg-green-50 border-b border-green-100 flex justify-between items-center">
+            <!-- 2. Result List (Best Candidates) - Resizable -->
+            <div id="results-panel" class="flex flex-col border-b border-slate-100 min-h-[80px]" style="height: 180px;">
+                <div class="px-4 py-2 bg-green-50 border-b border-green-100 flex justify-between items-center flex-shrink-0">
                     <h3 class="text-xs font-bold text-green-800 flex items-center gap-2" id="list-2-title">
                         <i data-lucide="trophy" class="w-3 h-3"></i> Results (MaxHeap)
                     </h3>
@@ -241,9 +273,12 @@
                 </div>
             </div>
 
-            <!-- 3. Frontier List MOVED DOWN -->
-            <div class="flex-1 flex flex-col min-h-0">
-                <div class="px-4 py-2 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
+            <!-- Resizer H: Results vs Frontier -->
+            <div id="resizer-right-split" class="resizer-h border-t border-slate-200 bg-slate-50"></div>
+
+            <!-- 3. Frontier List (Takes Remaining) -->
+            <div id="frontier-panel" class="flex-1 flex flex-col min-h-[80px]">
+                <div class="px-4 py-2 bg-amber-50 border-b border-amber-100 flex justify-between items-center flex-shrink-0">
                     <h3 class="text-xs font-bold text-amber-800 flex items-center gap-2" id="list-1-title">
                         <i data-lucide="list-ordered" class="w-3 h-3"></i> Frontier (MinHeap)
                     </h3>
@@ -255,7 +290,7 @@
             </div>
             
             <!-- Stats -->
-            <div class="h-8 border-t border-slate-200 bg-slate-50 flex items-center justify-between px-4 text-[10px] text-slate-500">
+            <div class="h-8 border-t border-slate-200 bg-slate-50 flex items-center justify-between px-4 text-[10px] text-slate-500 flex-shrink-0">
                 <span id="stat-nodes">Nodes: 0</span>
                 <span id="stat-calc" class="font-bold text-slate-700">Dist Calcs: 0</span>
             </div>
@@ -265,60 +300,83 @@
     <script>
         // --- CONFIG & STATE ---
         let CONFIG = {
-            M: 3,           // Max neighbors
-            efConstruction: 6, // Low ef to demonstrate pruning visually
-            k: 3,           // Top K results
-            nodeRadius: 5,
-            queryRadius: 6
+            M: 3, efConstruction: 6, k: 3, nodeRadius: 5, queryRadius: 6
         };
 
         const STATE = {
-            nodes: [],      // {id, x, y, neighbors: []}
-            entryPoint: null,
-            queryPoint: null,
-            
-            mode: 'BUILD',  // 'BUILD' or 'SEARCH'
-            isExecuting: false,
-            isPaused: false,
-            isWaitingConfirm: false,
-            
-            // Runtime Data
-            list1: [], // Frontier (MinHeap)
-            list2: [], // Results (MaxHeap logic)
-            visited: new Set(), 
-            distCalcCount: 0,
-            
-            // Animation
-            generator: null,
-            stepSpeed: 300, 
-            timer: null,
-            
-            // Visual Highlights
-            activeSearchNode: null, 
-            highlightNeighbors: [], 
-            targetNodeId: null, 
-            tempLines: [], 
-            highlightNodes: [],
-            
-            // Viewport
-            scale: 1,
-            offsetX: 0,
-            offsetY: 0,
-            isDragging: false,
-            lastMouse: {x:0, y:0}
+            nodes: [], entryPoint: null, queryPoint: null, mode: 'BUILD', isExecuting: false, isPaused: false, isWaitingConfirm: false,
+            list1: [], list2: [], visited: new Set(), distCalcCount: 0,
+            generator: null, stepSpeed: 300, timer: null,
+            activeSearchNode: null, highlightNeighbors: [], targetNodeId: null, tempLines: [], highlightNodes: [],
+            scale: 1, offsetX: 0, offsetY: 0, isDragging: false, lastMouse: {x:0, y:0}
         };
 
+        // --- RESIZING LOGIC ---
+        function initResizers() {
+            // 1. Columns (Left/Center, Center/Right)
+            const makeResizableCol = (resizer, leftEl, rightEl, isLeftResizer) => {
+                let isResizing = false;
+                resizer.addEventListener('mousedown', e => { isResizing = true; document.body.style.cursor = 'col-resize'; resizer.classList.add('bg-blue-500'); });
+                window.addEventListener('mousemove', e => {
+                    if (!isResizing) return;
+                    e.preventDefault();
+                    if (isLeftResizer) {
+                        const newW = Math.max(300, Math.min(800, e.clientX));
+                        leftEl.style.width = `${newW}px`;
+                    } else {
+                        const newW = Math.max(280, Math.min(600, window.innerWidth - e.clientX));
+                        rightEl.style.width = `${newW}px`;
+                    }
+                    resizeCanvas(); // Redraw canvas
+                });
+                window.addEventListener('mouseup', () => { isResizing = false; document.body.style.cursor = ''; resizer.classList.remove('bg-blue-500'); });
+            };
+            makeResizableCol(document.getElementById('resizer-col-1'), document.getElementById('left-panel'), null, true);
+            makeResizableCol(document.getElementById('resizer-col-2'), null, document.getElementById('right-panel'), false);
+
+            // 2. Vertical (Left: Code/Log)
+            const makeResizableRow = (resizer, topEl, containerEl) => {
+                let isResizing = false;
+                resizer.addEventListener('mousedown', e => { isResizing = true; document.body.style.cursor = 'row-resize'; resizer.classList.add('bg-blue-500'); });
+                window.addEventListener('mousemove', e => {
+                    if (!isResizing) return;
+                    e.preventDefault();
+                    // Determine height from bottom
+                    const containerRect = containerEl.getBoundingClientRect();
+                    const newH = Math.max(100, Math.min(containerRect.height - 100, containerRect.bottom - e.clientY));
+                    topEl.style.height = `${newH}px`;
+                });
+                window.addEventListener('mouseup', () => { isResizing = false; document.body.style.cursor = ''; resizer.classList.remove('bg-blue-500'); });
+            };
+            // Log panel is at bottom, we are resizing its height
+            makeResizableRow(document.getElementById('resizer-left-split'), document.getElementById('log-panel'), document.getElementById('left-panel'));
+
+            // 3. Vertical (Right: Results/Frontier)
+            // Results is middle, Frontier is bottom (flex-1). We resize Results height.
+            const makeResizableRowTop = (resizer, topEl) => {
+                 let isResizing = false;
+                 resizer.addEventListener('mousedown', e => { isResizing = true; document.body.style.cursor = 'row-resize'; resizer.classList.add('bg-blue-500'); });
+                 window.addEventListener('mousemove', e => {
+                    if (!isResizing) return;
+                    e.preventDefault();
+                    const rect = topEl.getBoundingClientRect();
+                    const newH = Math.max(80, e.clientY - rect.top); // Min 80
+                    topEl.style.height = `${newH}px`;
+                 });
+                 window.addEventListener('mouseup', () => { isResizing = false; document.body.style.cursor = ''; resizer.classList.remove('bg-blue-500'); });
+            };
+            makeResizableRowTop(document.getElementById('resizer-right-split'), document.getElementById('results-panel'));
+        }
+        
         // --- INPUT HANDLING ---
         function updateConfig() {
             const mVal = parseInt(document.getElementById('input-m').value) || 3;
             const efVal = parseInt(document.getElementById('input-ef').value) || 6;
             const kVal = parseInt(document.getElementById('input-k').value) || 3;
-            
             CONFIG.M = Math.max(1, mVal);
             CONFIG.efConstruction = Math.max(1, efVal);
             CONFIG.k = Math.max(1, kVal);
         }
-
         document.getElementById('input-m').addEventListener('change', updateConfig);
         document.getElementById('input-ef').addEventListener('change', updateConfig);
         document.getElementById('input-k').addEventListener('change', updateConfig);
@@ -329,30 +387,25 @@
         const ctx = canvas.getContext('2d');
         let width, height;
 
-        function resize() {
-            width = canvas.parentElement.clientWidth;
-            height = canvas.parentElement.clientHeight;
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            if (!container) return;
+            width = container.clientWidth;
+            height = container.clientHeight;
             canvas.width = width;
             canvas.height = height;
             draw();
         }
-        window.addEventListener('resize', resize);
+        window.addEventListener('resize', resizeCanvas);
 
         // --- INTERACTION ---
-        canvas.addEventListener('mousedown', e => {
-            if (e.button === 0) { STATE.isDragging = false; STATE.lastMouse = { x: e.clientX, y: e.clientY }; }
-        });
+        canvas.addEventListener('mousedown', e => { if (e.button === 0) { STATE.isDragging = false; STATE.lastMouse = { x: e.clientX, y: e.clientY }; } });
         canvas.addEventListener('mousemove', e => {
             if (e.buttons === 1) {
                 const dx = e.clientX - STATE.lastMouse.x;
                 const dy = e.clientY - STATE.lastMouse.y;
                 if (Math.abs(dx) > 2 || Math.abs(dy) > 2) STATE.isDragging = true;
-                if (STATE.isDragging) {
-                    STATE.offsetX += dx;
-                    STATE.offsetY += dy;
-                    STATE.lastMouse = { x: e.clientX, y: e.clientY };
-                    draw();
-                }
+                if (STATE.isDragging) { STATE.offsetX += dx; STATE.offsetY += dy; STATE.lastMouse = { x: e.clientX, y: e.clientY }; draw(); }
             }
         });
         canvas.addEventListener('mouseup', e => {
@@ -381,40 +434,28 @@
         }, { passive: false });
 
         // --- ALGORITHM HELPERS ---
-        function distL2(p1, p2) {
-            return Math.sqrt((p1.x-p2.x)**2 + (p1.y-p2.y)**2);
-        }
-
+        function distL2(p1, p2) { return Math.sqrt((p1.x-p2.x)**2 + (p1.y-p2.y)**2); }
         function showPruneEffect() {
-            const el = document.getElementById('prune-indicator');
-            el.style.opacity = '1';
-            setTimeout(() => el.style.opacity = '0', 1000);
+            const el = document.getElementById('prune-indicator'); el.style.opacity = '1'; setTimeout(() => el.style.opacity = '0', 1000);
         }
 
         // --- SILENT ADD (Initialization) ---
         function addNodeSilent(x, y) {
             const newNode = { id: STATE.nodes.length + 1, x, y, neighbors: [] };
-            if (STATE.nodes.length === 0) {
-                STATE.entryPoint = newNode;
-                STATE.nodes.push(newNode);
-                return;
-            }
+            if (STATE.nodes.length === 0) { STATE.entryPoint = newNode; STATE.nodes.push(newNode); return; }
             const entryDist = distL2(newNode, STATE.entryPoint);
             let frontier = [{ dist: entryDist, node: STATE.entryPoint }];
             let best = [{ dist: entryDist, node: STATE.entryPoint }];
             let visited = new Set([STATE.entryPoint.id]);
-            
             while (frontier.length > 0) {
-                frontier.sort((a,b) => a.dist - b.dist);
-                const current = frontier.shift();
+                frontier.sort((a,b) => a.dist - b.dist); const current = frontier.shift();
                 if (best.length >= CONFIG.efConstruction && current.dist > best[best.length-1].dist) continue; 
                 const neighbors = current.node.neighbors.map(nid => STATE.nodes.find(n => n.id === nid));
                 for (let nb of neighbors) {
                     if (!visited.has(nb.id)) {
                         visited.add(nb.id);
                         const d = distL2(newNode, nb);
-                        frontier.push({ dist: d, node: nb });
-                        best.push({ dist: d, node: nb });
+                        frontier.push({ dist: d, node: nb }); best.push({ dist: d, node: nb });
                         best.sort((a,b) => a.dist - b.dist);
                         if (best.length > CONFIG.efConstruction) best.pop();
                     }
@@ -431,520 +472,173 @@
         // --- GENERATOR: ADD ITEM ---
         function* genAddItem(x, y) {
             const newNode = { id: STATE.nodes.length + 1, x, y, neighbors: [] };
-            STATE.activeBuildNode = newNode; 
-            STATE.list1 = []; STATE.list2 = []; STATE.distCalcCount = 0;
-            STATE.visited = new Set();
-            
-            log(`添加节点 #${newNode.id}。准备搜索最近邻...`);
-            highlightCode('ln-add-def');
-            yield;
-
+            STATE.activeBuildNode = newNode; STATE.list1 = []; STATE.list2 = []; STATE.distCalcCount = 0; STATE.visited = new Set();
+            log(`添加节点 #${newNode.id}。准备搜索最近邻...`); highlightCode('ln-add-def'); yield;
             if (STATE.nodes.length === 0) {
-                STATE.entryPoint = newNode;
-                STATE.nodes.push(newNode);
-                highlightCode('ln-add-entry');
-                log("图为空，设置为入口点。");
-                draw(); yield;
-                STATE.activeBuildNode = null;
-                return;
+                STATE.entryPoint = newNode; STATE.nodes.push(newNode); highlightCode('ln-add-entry'); log("图为空，设置为入口点。"); draw(); yield; STATE.activeBuildNode = null; return;
             }
-
             highlightCode('ln-sl-init');
-            const entryDist = distL2(newNode, STATE.entryPoint);
-            STATE.distCalcCount++;
-            let frontier = [{ dist: entryDist, node: STATE.entryPoint }];
-            let best = [{ dist: entryDist, node: STATE.entryPoint }];
-            STATE.visited.add(STATE.entryPoint.id);
-            
-            STATE.list1 = frontier; STATE.list2 = best;
-            updateLists(); draw(); yield;
-
+            const entryDist = distL2(newNode, STATE.entryPoint); STATE.distCalcCount++;
+            let frontier = [{ dist: entryDist, node: STATE.entryPoint }]; let best = [{ dist: entryDist, node: STATE.entryPoint }]; STATE.visited.add(STATE.entryPoint.id);
+            STATE.list1 = frontier; STATE.list2 = best; updateLists(); draw(); yield;
             while (frontier.length > 0) {
                 highlightCode('ln-sl-while'); yield;
-
-                frontier.sort((a,b) => a.dist - b.dist);
-                const current = frontier.shift();
-                STATE.activeSearchNode = current.node.id;
-                highlightCode('ln-sl-pop');
-                log(`Frontier 弹出: #${current.node.id} (dist: ${current.dist.toFixed(1)})`);
-                
-                STATE.tempLines = [{p1: current.node, p2: newNode, color: '#f59e0b', dash: [5, 5], width: 2}];
-                draw(); yield;
-
-                highlightCode('ln-sl-prune');
-                const furthestDist = best[best.length-1].dist;
-                if (current.dist > furthestDist && best.length >= CONFIG.efConstruction) {
-                    showPruneEffect();
-                    log(`触发剪枝!`, "text-red-400");
-                    yield;
-                    continue; 
-                }
-                yield;
-
-                highlightCode('ln-sl-nb-loop');
-                const neighbors = current.node.neighbors.map(nid => STATE.nodes.find(n => n.id === nid));
-                
-                // Highlight all neighbors first
-                STATE.highlightNeighbors = neighbors.map(n => n.id);
-                draw(); 
-                log(`检查节点 #${current.node.id} 的 ${neighbors.length} 个邻居...`);
-                yield;
-
+                frontier.sort((a,b) => a.dist - b.dist); const current = frontier.shift(); STATE.activeSearchNode = current.node.id; highlightCode('ln-sl-pop'); log(`Frontier 弹出: #${current.node.id} (dist: ${current.dist.toFixed(1)})`);
+                STATE.tempLines = [{p1: current.node, p2: newNode, color: '#f59e0b', dash: [5, 5], width: 2}]; draw(); yield;
+                highlightCode('ln-sl-prune'); const furthestDist = best[best.length-1].dist;
+                if (current.dist > furthestDist && best.length >= CONFIG.efConstruction) { showPruneEffect(); log(`触发剪枝!`, "text-red-400"); yield; continue; } yield;
+                highlightCode('ln-sl-nb-loop'); const neighbors = current.node.neighbors.map(nid => STATE.nodes.find(n => n.id === nid));
+                STATE.highlightNeighbors = neighbors.map(n => n.id); draw(); log(`检查节点 #${current.node.id} 的 ${neighbors.length} 个邻居...`); yield;
                 for (let nb of neighbors) {
-                    STATE.tempLines = [{p1: current.node, p2: nb, color: '#f472b6', dash: [2, 2], width: 1.5}];
-                    STATE.targetNodeId = nb.id;
-                    highlightCode('ln-sl-visit'); 
-                    draw();
-                    yield; 
-                    
+                    STATE.tempLines = [{p1: current.node, p2: nb, color: '#f472b6', dash: [2, 2], width: 1.5}]; STATE.targetNodeId = nb.id; highlightCode('ln-sl-visit'); draw(); yield; 
                     if (!STATE.visited.has(nb.id)) {
-                        STATE.visited.add(nb.id);
-                        const d = distL2(newNode, nb);
-                        STATE.distCalcCount++;
-                        highlightCode('ln-sl-dist');
-                        yield;
-
-                        highlightCode('ln-sl-update');
-                        const currentFurthest = best[best.length-1].dist;
+                        STATE.visited.add(nb.id); const d = distL2(newNode, nb); STATE.distCalcCount++; highlightCode('ln-sl-dist'); yield;
+                        highlightCode('ln-sl-update'); const currentFurthest = best[best.length-1].dist;
                         if (best.length < CONFIG.efConstruction || d < currentFurthest) {
-                            frontier.push({ dist: d, node: nb });
-                            best.push({ dist: d, node: nb });
-                            best.sort((a,b) => a.dist - b.dist);
-                            if (best.length > CONFIG.efConstruction) best.pop();
-                            updateLists();
-                            log(`邻居 #${nb.id} 加入候选`);
-                        }
-                        yield;
+                            frontier.push({ dist: d, node: nb }); best.push({ dist: d, node: nb }); best.sort((a,b) => a.dist - b.dist);
+                            if (best.length > CONFIG.efConstruction) best.pop(); updateLists(); log(`邻居 #${nb.id} 加入候选`);
+                        } yield;
                     }
                 }
-                STATE.tempLines = []; 
-                STATE.targetNodeId = null;
-                STATE.highlightNeighbors = [];
+                STATE.tempLines = []; STATE.targetNodeId = null; STATE.highlightNeighbors = [];
             }
-            
-            STATE.activeSearchNode = null;
-            STATE.tempLines = [];
-            
-            highlightCode('ln-add-select');
-            const neighborsToConnect = best.slice(0, CONFIG.M).map(item => item.node);
-            STATE.list2 = best.slice(0, CONFIG.M);
-            STATE.highlightNodes = neighborsToConnect.map(n => n.id);
-            updateLists();
-            log(`选定 ${neighborsToConnect.length} 个最近邻。`);
-            draw(); yield;
-
-            STATE.nodes.push(newNode);
-            STATE.highlightNodes = [];
-            highlightCode('ln-add-conn');
+            STATE.activeSearchNode = null; STATE.tempLines = []; highlightCode('ln-add-select');
+            const neighborsToConnect = best.slice(0, CONFIG.M).map(item => item.node); STATE.list2 = best.slice(0, CONFIG.M); STATE.highlightNodes = neighborsToConnect.map(n => n.id); updateLists(); log(`选定 ${neighborsToConnect.length} 个最近邻。`); draw(); yield;
+            STATE.nodes.push(newNode); STATE.highlightNodes = []; highlightCode('ln-add-conn');
             for (let nb of neighborsToConnect) {
                 if (!newNode.neighbors.includes(nb.id)) newNode.neighbors.push(nb.id);
                 if (!nb.neighbors.includes(newNode.id)) nb.neighbors.push(newNode.id);
                 STATE.tempLines.push({p1: newNode, p2: nb, color: '#10b981', width: 2});
             }
-            draw();
-            log(`连接建立完成。点击 '完成' 结束。`, "text-indigo-500 font-bold");
-            yield 'WAIT_CONFIRM';
+            draw(); log(`连接建立完成。点击 '完成' 结束。`, "text-indigo-500 font-bold"); yield 'WAIT_CONFIRM';
         }
 
         // --- GENERATOR: SEARCH ---
         function* genSearch(queryX, queryY) {
-            STATE.queryPoint = { x: queryX, y: queryY };
-            STATE.list1 = []; STATE.list2 = []; STATE.distCalcCount = 0;
-            STATE.visited = new Set();
-            
-            highlightCode('ln-q-def');
-            log("开始搜索...");
-            yield;
-
-            highlightCode('ln-q-init');
-            const entryDist = distL2(STATE.queryPoint, STATE.entryPoint);
-            STATE.distCalcCount++;
-            STATE.list1.push({ dist: entryDist, node: STATE.entryPoint });
-            STATE.list2.push({ dist: entryDist, node: STATE.entryPoint });
-            STATE.visited.add(STATE.entryPoint.id);
-            updateLists(); draw(); yield;
-
+            STATE.queryPoint = { x: queryX, y: queryY }; STATE.list1 = []; STATE.list2 = []; STATE.distCalcCount = 0; STATE.visited = new Set();
+            highlightCode('ln-q-def'); log("开始搜索..."); yield;
+            highlightCode('ln-q-init'); const entryDist = distL2(STATE.queryPoint, STATE.entryPoint); STATE.distCalcCount++; STATE.list1.push({ dist: entryDist, node: STATE.entryPoint }); STATE.list2.push({ dist: entryDist, node: STATE.entryPoint }); STATE.visited.add(STATE.entryPoint.id); updateLists(); draw(); yield;
             while (STATE.list1.length > 0) {
                 highlightCode('ln-q-while'); yield;
-
-                STATE.list1.sort((a,b) => a.dist - b.dist);
-                const current = STATE.list1.shift();
-                STATE.activeSearchNode = current.node.id;
-                
-                highlightCode('ln-q-pop');
-                log(`Pop #${current.node.id}`);
-                draw(); yield;
-
-                highlightCode('ln-q-prune');
-                const furthestResult = STATE.list2[STATE.list2.length-1].dist;
-                if (current.dist > furthestResult && STATE.list2.length >= CONFIG.k) {
-                    // Prune logic check
-                }
-                yield;
-
-                highlightCode('ln-q-nb-loop');
-                const neighbors = current.node.neighbors.map(nid => STATE.nodes.find(n => n.id === nid));
-                
-                STATE.highlightNeighbors = neighbors.map(n => n.id);
-                draw();
-                log(`检查 ${neighbors.length} 个邻居...`);
-                yield;
-
+                STATE.list1.sort((a,b) => a.dist - b.dist); const current = STATE.list1.shift(); STATE.activeSearchNode = current.node.id; highlightCode('ln-q-pop'); log(`Pop #${current.node.id}`); draw(); yield;
+                highlightCode('ln-q-prune'); const furthestResult = STATE.list2[STATE.list2.length-1].dist; if (current.dist > furthestResult && STATE.list2.length >= CONFIG.k) {} yield;
+                highlightCode('ln-q-nb-loop'); const neighbors = current.node.neighbors.map(nid => STATE.nodes.find(n => n.id === nid)); STATE.highlightNeighbors = neighbors.map(n => n.id); draw(); log(`检查 ${neighbors.length} 个邻居...`); yield;
                 for (let nb of neighbors) {
-                    STATE.tempLines = [{p1: current.node, p2: nb, color: '#f472b6', dash: [2, 2], width: 1.5}];
-                    STATE.targetNodeId = nb.id;
-                    highlightCode('ln-q-visit');
-                    draw(); yield;
-                    
+                    STATE.tempLines = [{p1: current.node, p2: nb, color: '#f472b6', dash: [2, 2], width: 1.5}]; STATE.targetNodeId = nb.id; highlightCode('ln-q-visit'); draw(); yield;
                     if (!STATE.visited.has(nb.id)) {
-                        STATE.visited.add(nb.id);
-                        highlightCode('ln-q-dist');
-                        const d = distL2(STATE.queryPoint, nb);
-                        STATE.distCalcCount++;
-                        
-                        highlightCode('ln-q-update');
+                        STATE.visited.add(nb.id); highlightCode('ln-q-dist'); const d = distL2(STATE.queryPoint, nb); STATE.distCalcCount++; highlightCode('ln-q-update');
                         if (STATE.list2.length < CONFIG.efConstruction || d < STATE.list2[STATE.list2.length-1].dist) {
-                            STATE.list1.push({ dist: d, node: nb });
-                            STATE.list2.push({ dist: d, node: nb });
-                            STATE.list2.sort((a,b) => a.dist - b.dist);
-                            if (STATE.list2.length > CONFIG.efConstruction) STATE.list2.pop();
-                            updateLists();
-                        }
-                        yield;
+                            STATE.list1.push({ dist: d, node: nb }); STATE.list2.push({ dist: d, node: nb }); STATE.list2.sort((a,b) => a.dist - b.dist); if (STATE.list2.length > CONFIG.efConstruction) STATE.list2.pop(); updateLists();
+                        } yield;
                     }
                 }
-                STATE.tempLines = [];
-                STATE.targetNodeId = null;
-                STATE.highlightNeighbors = [];
+                STATE.tempLines = []; STATE.targetNodeId = null; STATE.highlightNeighbors = [];
             }
-
-            highlightCode('ln-q-return');
-            STATE.activeSearchNode = null;
-            
-            const results = STATE.list2.slice(0, CONFIG.k);
-            STATE.tempLines = results.map(r => ({p1: STATE.queryPoint, p2: r.node, color: '#10b981', dash: [5,5], width: 1}));
-            
-            draw();
-            log(`搜索完成。点击 '完成' 清除。`, "text-indigo-500 font-bold");
-            yield 'WAIT_CONFIRM';
+            highlightCode('ln-q-return'); STATE.activeSearchNode = null; const results = STATE.list2.slice(0, CONFIG.k); STATE.tempLines = results.map(r => ({p1: STATE.queryPoint, p2: r.node, color: '#10b981', dash: [5,5], width: 1}));
+            draw(); log(`搜索完成。点击 '完成' 清除。`, "text-indigo-500 font-bold"); yield 'WAIT_CONFIRM';
         }
 
         // --- CONTROLLER ---
         function handleCanvasClick(x, y) {
             if (STATE.isExecuting || STATE.isWaitingConfirm) return;
-            
-            STATE.activeBuildNode = null;
-            STATE.queryPoint = null;
-            STATE.tempLines = [];
-            
+            STATE.activeBuildNode = null; STATE.queryPoint = null; STATE.tempLines = [];
             resetExecution();
             if (STATE.mode === 'BUILD') STATE.generator = genAddItem(x, y);
-            else {
-                if (STATE.nodes.length === 0) return log("图为空!", "text-red-400");
-                STATE.generator = genSearch(x, y);
-            }
-            STATE.isExecuting = true;
-            STATE.isPaused = false;
-            STATE.timer = setInterval(step, STATE.stepSpeed);
-            updateUI();
+            else { if (STATE.nodes.length === 0) return log("图为空!", "text-red-400"); STATE.generator = genSearch(x, y); }
+            STATE.isExecuting = true; STATE.isPaused = false; STATE.timer = setInterval(step, STATE.stepSpeed); updateUI();
         }
-
         function finishAction() {
-            if (STATE.mode === 'BUILD') {
-                STATE.activeBuildNode = null;
-                STATE.tempLines = [];
-                STATE.isWaitingConfirm = false; 
-                STATE.isExecuting = false;
-                draw();
-                log("新节点已确认添加。", "text-slate-500");
-            } else {
-                STATE.queryPoint = null;
-                STATE.tempLines = [];
-                STATE.isWaitingConfirm = false;
-                STATE.isExecuting = false;
-                draw();
-                log("查询已清除。", "text-slate-500");
-            }
+            if (STATE.mode === 'BUILD') { STATE.activeBuildNode = null; STATE.tempLines = []; STATE.isWaitingConfirm = false; STATE.isExecuting = false; draw(); log("新节点已确认添加。", "text-slate-500"); }
+            else { STATE.queryPoint = null; STATE.tempLines = []; STATE.isWaitingConfirm = false; STATE.isExecuting = false; draw(); log("查询已清除。", "text-slate-500"); }
             resetExecution();
         }
-
         function setMode(mode) {
-            // Clean up old state completely
-            STATE.queryPoint = null;
-            STATE.activeBuildNode = null;
-            STATE.activeSearchNode = null;
-            STATE.visited.clear();
-            STATE.tempLines = [];
-            STATE.highlightNodes = [];
-            STATE.highlightNeighbors = [];
-            STATE.isWaitingConfirm = false;
-            resetExecution();
-            
+            STATE.queryPoint = null; STATE.activeBuildNode = null; STATE.activeSearchNode = null; STATE.visited.clear(); STATE.tempLines = []; STATE.highlightNodes = []; STATE.highlightNeighbors = []; STATE.isWaitingConfirm = false; resetExecution();
             STATE.mode = mode;
-            const btnBuild = document.getElementById('btn-mode-build');
-            const btnSearch = document.getElementById('btn-mode-search');
-            const label = document.getElementById('code-mode-label');
-            
+            const btnBuild = document.getElementById('btn-mode-build'); const btnSearch = document.getElementById('btn-mode-search'); const label = document.getElementById('code-mode-label');
             if (mode === 'BUILD') {
-                btnBuild.className = "flex-1 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 transition-colors";
-                btnSearch.className = "flex-1 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors";
-                label.innerText = "建图模式";
-                document.getElementById('code-group-build').classList.remove('hidden');
-                document.getElementById('code-group-search').classList.add('hidden');
-                document.getElementById('list-1-title').innerHTML = '<i data-lucide="list-ordered" class="w-3 h-3"></i> Frontier';
+                btnBuild.className = "flex-1 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 transition-colors"; btnSearch.className = "flex-1 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors"; label.innerText = "建图模式"; document.getElementById('code-group-build').classList.remove('hidden'); document.getElementById('code-group-search').classList.add('hidden'); document.getElementById('list-1-title').innerHTML = '<i data-lucide="list-ordered" class="w-3 h-3"></i> Frontier';
             } else {
-                btnSearch.className = "flex-1 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 transition-colors";
-                btnBuild.className = "flex-1 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors";
-                label.innerText = "搜索模式";
-                document.getElementById('code-group-search').classList.remove('hidden');
-                document.getElementById('code-group-build').classList.add('hidden');
-                document.getElementById('list-1-title').innerHTML = '<i data-lucide="list-ordered" class="w-3 h-3"></i> Frontier';
+                btnSearch.className = "flex-1 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 transition-colors"; btnBuild.className = "flex-1 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors"; label.innerText = "搜索模式"; document.getElementById('code-group-search').classList.remove('hidden'); document.getElementById('code-group-build').classList.add('hidden'); document.getElementById('list-1-title').innerHTML = '<i data-lucide="list-ordered" class="w-3 h-3"></i> Frontier';
             }
-            lucide.createIcons();
-            draw();
+            lucide.createIcons(); draw();
         }
-
         function quickInit() {
-            STATE.activeBuildNode = null;
-            STATE.queryPoint = null;
-            STATE.tempLines = [];
-            STATE.visited.clear();
-            STATE.isWaitingConfirm = false;
-            resetExecution();
-            
-            STATE.nodes = []; STATE.entryPoint = null;
-            log("正在生成 40 个节点...", "text-blue-400");
-            for(let i=0; i<40; i++) {
-                const x = Math.random() * (width - 60) + 30;
-                const y = Math.random() * (height - 60) + 30;
-                addNodeSilent(x, y);
-            }
-            const xs = STATE.nodes.map(n=>n.x), ys = STATE.nodes.map(n=>n.y);
-            STATE.offsetX = (width/2) - ((Math.min(...xs)+Math.max(...xs))/2);
-            STATE.offsetY = (height/2) - ((Math.min(...ys)+Math.max(...ys))/2);
-            STATE.scale = 1;
-            draw();
-            log("初始化完成 (40点)。", "text-green-500");
-            updateUI();
+            STATE.activeBuildNode = null; STATE.queryPoint = null; STATE.tempLines = []; STATE.visited.clear(); STATE.isWaitingConfirm = false; resetExecution();
+            STATE.nodes = []; STATE.entryPoint = null; log("正在生成 40 个节点...", "text-blue-400");
+            for(let i=0; i<40; i++) { const x = Math.random() * (width - 60) + 30; const y = Math.random() * (height - 60) + 30; addNodeSilent(x, y); }
+            const xs = STATE.nodes.map(n=>n.x), ys = STATE.nodes.map(n=>n.y); STATE.offsetX = (width/2) - ((Math.min(...xs)+Math.max(...xs))/2); STATE.offsetY = (height/2) - ((Math.min(...ys)+Math.max(...ys))/2); STATE.scale = 1; draw(); log("初始化完成 (40点)。", "text-green-500"); updateUI();
         }
-
-        function step() {
-            if (!STATE.generator) return;
-            const res = STATE.generator.next();
-            if (res.value === 'WAIT_CONFIRM') {
-                clearInterval(STATE.timer);
-                STATE.isPaused = true; 
-                STATE.isWaitingConfirm = true;
-                updateUI();
-                return;
-            }
-            if (res.done) resetExecution();
-        }
-
-        function resetExecution() {
-            clearInterval(STATE.timer);
-            STATE.isExecuting = false; STATE.isPaused = false; STATE.generator = null;
-            STATE.activeSearchNode = null;
-            STATE.highlightNodes = [];
-            STATE.highlightNeighbors = [];
-            highlightCode(null); updateUI(); draw();
-        }
-
+        function step() { if (!STATE.generator) return; const res = STATE.generator.next(); if (res.value === 'WAIT_CONFIRM') { clearInterval(STATE.timer); STATE.isPaused = true; STATE.isWaitingConfirm = true; updateUI(); return; } if (res.done) resetExecution(); }
+        function resetExecution() { clearInterval(STATE.timer); STATE.isExecuting = false; STATE.isPaused = false; STATE.generator = null; STATE.activeSearchNode = null; STATE.highlightNodes = []; STATE.highlightNeighbors = []; highlightCode(null); updateUI(); draw(); }
         function draw() {
-            ctx.clearRect(0, 0, width, height);
-            ctx.save();
-            ctx.translate(STATE.offsetX, STATE.offsetY);
-            ctx.scale(STATE.scale, STATE.scale);
-
+            ctx.clearRect(0, 0, width, height); ctx.save(); ctx.translate(STATE.offsetX, STATE.offsetY); ctx.scale(STATE.scale, STATE.scale);
             // Edges
             ctx.lineWidth = 1 / STATE.scale;
             STATE.nodes.forEach(node => {
                 node.neighbors.forEach(nid => {
-                    const nb = STATE.nodes.find(n => n.id === nid);
-                    if (nb) {
-                        ctx.beginPath(); ctx.moveTo(node.x, node.y); ctx.lineTo(nb.x, nb.y);
-                        ctx.strokeStyle = '#cbd5e1'; ctx.stroke();
-                    }
+                    const nb = STATE.nodes.find(n => n.id === nid); if (nb) { ctx.beginPath(); ctx.moveTo(node.x, node.y); ctx.lineTo(nb.x, nb.y); ctx.strokeStyle = '#cbd5e1'; ctx.stroke(); }
                 });
             });
-
             // Temp Lines
             STATE.tempLines.forEach(l => {
-                ctx.beginPath(); if (l.dash) ctx.setLineDash(l.dash);
-                ctx.moveTo(l.p1.x, l.p1.y); ctx.lineTo(l.p2.x, l.p2.y);
-                ctx.strokeStyle = l.color; ctx.lineWidth = (l.width || 1)/STATE.scale; ctx.stroke(); ctx.setLineDash([]);
+                ctx.beginPath(); if (l.dash) ctx.setLineDash(l.dash); ctx.moveTo(l.p1.x, l.p1.y); ctx.lineTo(l.p2.x, l.p2.y); ctx.strokeStyle = l.color; ctx.lineWidth = (l.width || 1)/STATE.scale; ctx.stroke(); ctx.setLineDash([]);
             });
-
             // Nodes
             STATE.nodes.forEach(node => {
                 if (node === STATE.activeBuildNode) return;
-                
-                // 1. Base Color Determination
+                // Base Color Logic
                 let baseColor = '#e2e8f0'; // Default Unvisited Gray
-                
-                if (!STATE.isExecuting && !STATE.isWaitingConfirm) {
-                    baseColor = '#3b82f6'; // Idle Blue
-                } else if (STATE.visited.has(node.id)) {
-                    baseColor = '#3b82f6'; // Visited Blue
-                }
-                
+                if (!STATE.isExecuting && !STATE.isWaitingConfirm) baseColor = '#3b82f6'; // Idle Blue
+                else if (STATE.visited.has(node.id)) baseColor = '#3b82f6'; // Visited Blue
                 if (node === STATE.entryPoint) baseColor = '#7c3aed'; // Purple Entry
 
-                // 2. Draw Highlights (Underneath or Around)
-                
-                // Active Search Node (Amber Halo)
-                if (STATE.activeSearchNode === node.id) { 
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.arc(node.x, node.y, CONFIG.nodeRadius + 6/STATE.scale, 0, Math.PI * 2);
-                    ctx.globalAlpha = 0.6;
-                    ctx.fillStyle = '#f59e0b'; // Amber glow
-                    ctx.fill();
-                    ctx.restore();
-                }
-                
-                // Neighbors Loop Highlight (Yellow Halo)
-                if (STATE.highlightNeighbors.includes(node.id)) {
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.arc(node.x, node.y, CONFIG.nodeRadius + 4/STATE.scale, 0, Math.PI * 2);
-                    ctx.globalAlpha = 0.5;
-                    ctx.fillStyle = '#fde047'; 
-                    ctx.fill();
-                    ctx.restore();
-                    
-                     // Line to active
-                    if (STATE.activeSearchNode) {
-                         const center = STATE.nodes.find(n => n.id === STATE.activeSearchNode);
-                         if (center) {
-                             ctx.beginPath(); ctx.moveTo(center.x, center.y); ctx.lineTo(node.x, node.y);
-                             ctx.strokeStyle = '#fde047'; ctx.lineWidth = 1/STATE.scale; ctx.stroke();
-                         }
-                    }
-                }
+                // Highlights (Rings/Glows)
+                if (STATE.activeSearchNode === node.id) { ctx.save(); ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius + 6/STATE.scale, 0, Math.PI * 2); ctx.globalAlpha = 0.6; ctx.fillStyle = '#f59e0b'; ctx.fill(); ctx.restore(); }
+                if (STATE.highlightNeighbors.includes(node.id)) { ctx.save(); ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius + 4/STATE.scale, 0, Math.PI * 2); ctx.globalAlpha = 0.5; ctx.fillStyle = '#fde047'; ctx.fill(); ctx.restore(); if (STATE.activeSearchNode) { const center = STATE.nodes.find(n => n.id === STATE.activeSearchNode); if (center) { ctx.beginPath(); ctx.moveTo(center.x, center.y); ctx.lineTo(node.x, node.y); ctx.strokeStyle = '#fde047'; ctx.lineWidth = 1/STATE.scale; ctx.stroke(); } } }
+                if (STATE.targetNodeId === node.id) { ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius + 4/STATE.scale, 0, Math.PI * 2); ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 2/STATE.scale; ctx.setLineDash([2, 2]); ctx.stroke(); ctx.setLineDash([]); }
+                if (STATE.highlightNodes.includes(node.id)) { ctx.save(); ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius + 5/STATE.scale, 0, Math.PI * 2); ctx.globalAlpha = 0.6; ctx.fillStyle = '#10b981'; ctx.fill(); ctx.restore(); }
 
-                // Target Check Highlight (Pink Ring)
-                if (STATE.targetNodeId === node.id) {
-                    ctx.beginPath(); 
-                    ctx.arc(node.x, node.y, CONFIG.nodeRadius + 4/STATE.scale, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#f472b6'; 
-                    ctx.lineWidth = 2/STATE.scale; 
-                    ctx.setLineDash([2, 2]); 
-                    ctx.stroke(); 
-                    ctx.setLineDash([]);
-                }
-                
-                // Final Result Highlight (Green Ring/Glow instead of fill replacement)
-                if (STATE.highlightNodes.includes(node.id)) {
-                     ctx.save();
-                     ctx.beginPath();
-                     ctx.arc(node.x, node.y, CONFIG.nodeRadius + 5/STATE.scale, 0, Math.PI * 2);
-                     ctx.globalAlpha = 0.6;
-                     ctx.fillStyle = '#10b981';
-                     ctx.fill();
-                     ctx.restore();
-                }
-                
-                // 3. Draw Node Body with Base Color
-                ctx.beginPath(); 
-                ctx.arc(node.x, node.y, CONFIG.nodeRadius, 0, Math.PI * 2);
-                ctx.fillStyle = baseColor; 
-                ctx.fill();
-                
-                // Entry Point Ring (On top)
-                if (node === STATE.entryPoint) {
-                    ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius + 2/STATE.scale, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 1/STATE.scale; ctx.stroke();
-                }
-
-                // ID Label
-                ctx.fillStyle = '#64748b'; 
-                ctx.font = `${10/STATE.scale}px sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.fillText(node.id, node.x, node.y - 8/STATE.scale);
+                // Body
+                ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius, 0, Math.PI * 2); ctx.fillStyle = baseColor; ctx.fill();
+                if (node === STATE.entryPoint) { ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius + 2/STATE.scale, 0, Math.PI * 2); ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 1/STATE.scale; ctx.stroke(); }
+                // Label
+                ctx.fillStyle = '#64748b'; ctx.font = `${10/STATE.scale}px sans-serif`; ctx.textAlign = 'center'; ctx.fillText(node.id, node.x, node.y - 8/STATE.scale);
             });
-
             // Active Build Node
             if (STATE.activeBuildNode) {
-                const node = STATE.activeBuildNode;
-                ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius, 0, Math.PI * 2);
-                ctx.fillStyle = '#ec4899'; ctx.fill();
-                ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius + 4/STATE.scale, 0, Math.PI * 2);
-                ctx.strokeStyle = '#ec4899'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1/STATE.scale; ctx.stroke(); ctx.setLineDash([]);
+                const node = STATE.activeBuildNode; ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius, 0, Math.PI * 2); ctx.fillStyle = '#ec4899'; ctx.fill(); ctx.beginPath(); ctx.arc(node.x, node.y, CONFIG.nodeRadius + 4/STATE.scale, 0, Math.PI * 2); ctx.strokeStyle = '#ec4899'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1/STATE.scale; ctx.stroke(); ctx.setLineDash([]);
             }
-
             // Query Point
             if (STATE.queryPoint) {
-                ctx.beginPath(); ctx.arc(STATE.queryPoint.x, STATE.queryPoint.y, CONFIG.queryRadius, 0, Math.PI * 2);
-                ctx.fillStyle = '#ef4444'; ctx.fill();
-                ctx.strokeStyle = 'white'; ctx.lineWidth = 2/STATE.scale; ctx.stroke();
+                ctx.beginPath(); ctx.arc(STATE.queryPoint.x, STATE.queryPoint.y, CONFIG.queryRadius, 0, Math.PI * 2); ctx.fillStyle = '#ef4444'; ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 2/STATE.scale; ctx.stroke();
             }
             ctx.restore();
         }
-
-        // --- UTILS ---
+        // Utils
         function updateLists() {
-            const l1 = document.getElementById('list-primary');
-            const l2 = document.getElementById('list-secondary');
+            const l1 = document.getElementById('list-primary'); const l2 = document.getElementById('list-secondary');
             const makeItem = (i) => `<div class="text-[10px] flex justify-between p-1 border-b border-slate-100 last:border-0 fade-enter"><span>#${i.node.id}</span><span class="font-mono text-slate-500">${i.dist.toFixed(1)}</span></div>`;
-            const list1Disp = [...STATE.list1].sort((a,b) => a.dist - b.dist);
-            l1.innerHTML = list1Disp.length ? list1Disp.map(makeItem).join('') : '<div class="text-center text-xs text-slate-300 mt-2">Empty</div>';
-            const list2Disp = [...STATE.list2].sort((a,b) => a.dist - b.dist);
-            l2.innerHTML = list2Disp.length ? list2Disp.map(makeItem).join('') : '<div class="text-center text-xs text-slate-300 mt-2">Empty</div>';
+            const list1Disp = [...STATE.list1].sort((a,b) => a.dist - b.dist); l1.innerHTML = list1Disp.length ? list1Disp.map(makeItem).join('') : '<div class="text-center text-xs text-slate-300 mt-2">Empty</div>';
+            const list2Disp = [...STATE.list2].sort((a,b) => a.dist - b.dist); l2.innerHTML = list2Disp.length ? list2Disp.map(makeItem).join('') : '<div class="text-center text-xs text-slate-300 mt-2">Empty</div>';
         }
-
-        function log(msg, cls="text-slate-400") {
-            const div = document.createElement('div'); div.className = cls; div.innerText = `> ${msg}`;
-            const c = document.getElementById('log-container'); c.appendChild(div); c.scrollTop = c.scrollHeight;
-        }
-        function highlightCode(id) {
-            document.querySelectorAll('.code-active').forEach(el => el.classList.remove('code-active'));
-            if (id) document.getElementById(id)?.classList.add('code-active');
-        }
+        function log(msg, cls="text-slate-400") { const div = document.createElement('div'); div.className = cls; div.innerText = `> ${msg}`; const c = document.getElementById('log-container'); c.appendChild(div); c.scrollTop = c.scrollHeight; }
+        function highlightCode(id) { document.querySelectorAll('.code-active').forEach(el => el.classList.remove('code-active')); if (id) document.getElementById(id)?.classList.add('code-active'); }
         function updateUI() {
-            const btnPlay = document.getElementById('btn-play');
-            const btnNext = document.getElementById('btn-next');
-            document.getElementById('stat-nodes').innerText = `Nodes: ${STATE.nodes.length}`;
-            document.getElementById('stat-calc').innerText = `Dist Calcs: ${STATE.distCalcCount}`;
-            
-            if (STATE.isWaitingConfirm) {
-                btnNext.disabled = true;
-                btnPlay.innerHTML = `<i data-lucide="check" class="w-3 h-3"></i> 完成`;
-                btnPlay.classList.remove('bg-indigo-600', 'bg-amber-500');
-                btnPlay.classList.add('bg-green-600');
-            } else if (STATE.isExecuting) {
-                btnNext.disabled = !STATE.isPaused;
-                btnPlay.innerHTML = STATE.isPaused ? `<i data-lucide="play" class="w-3 h-3 fill-current"></i> 继续` : `<i data-lucide="pause" class="w-3 h-3 fill-current"></i> 暂停`;
-                btnPlay.classList.toggle('bg-amber-500', !STATE.isPaused);
-                btnPlay.classList.toggle('bg-indigo-600', STATE.isPaused);
-                btnPlay.classList.remove('bg-green-600');
-            } else {
-                btnNext.disabled = false;
-                btnPlay.innerHTML = `<i data-lucide="play" class="w-3 h-3 fill-current"></i> 自动执行`;
-                btnPlay.classList.remove('bg-amber-500', 'bg-green-600');
-                btnPlay.classList.add('bg-indigo-600');
-            }
+            const btnPlay = document.getElementById('btn-play'); const btnNext = document.getElementById('btn-next');
+            document.getElementById('stat-nodes').innerText = `Nodes: ${STATE.nodes.length}`; document.getElementById('stat-calc').innerText = `Dist Calcs: ${STATE.distCalcCount}`;
+            if (STATE.isWaitingConfirm) { btnNext.disabled = true; btnPlay.innerHTML = `<i data-lucide="check" class="w-3 h-3"></i> 完成`; btnPlay.classList.remove('bg-indigo-600', 'bg-amber-500'); btnPlay.classList.add('bg-green-600'); }
+            else if (STATE.isExecuting) { btnNext.disabled = !STATE.isPaused; btnPlay.innerHTML = STATE.isPaused ? `<i data-lucide="play" class="w-3 h-3 fill-current"></i> 继续` : `<i data-lucide="pause" class="w-3 h-3 fill-current"></i> 暂停`; btnPlay.classList.toggle('bg-amber-500', !STATE.isPaused); btnPlay.classList.toggle('bg-indigo-600', STATE.isPaused); btnPlay.classList.remove('bg-green-600'); }
+            else { btnNext.disabled = false; btnPlay.innerHTML = `<i data-lucide="play" class="w-3 h-3 fill-current"></i> 自动执行`; btnPlay.classList.remove('bg-amber-500', 'bg-green-600'); btnPlay.classList.add('bg-indigo-600'); }
             lucide.createIcons();
         }
-
         // Binds
-        document.getElementById('btn-mode-build').onclick = () => setMode('BUILD');
-        document.getElementById('btn-mode-search').onclick = () => setMode('SEARCH');
-        document.getElementById('btn-quick-init').onclick = quickInit;
+        document.getElementById('btn-mode-build').onclick = () => setMode('BUILD'); document.getElementById('btn-mode-search').onclick = () => setMode('SEARCH'); document.getElementById('btn-quick-init').onclick = quickInit;
         document.getElementById('btn-reset').onclick = () => { STATE.nodes = []; STATE.entryPoint = null; STATE.queryPoint = null; resetExecution(); draw(); log("画布已清空"); };
-        document.getElementById('btn-play').onclick = () => {
-            if (STATE.isWaitingConfirm) finishAction();
-            else if(STATE.isPaused) { STATE.isPaused = false; STATE.timer = setInterval(step, STATE.stepSpeed); updateUI(); }
-            else if(STATE.isExecuting) { STATE.isPaused = true; clearInterval(STATE.timer); updateUI(); }
-        };
+        document.getElementById('btn-play').onclick = () => { if (STATE.isWaitingConfirm) finishAction(); else if(STATE.isPaused) { STATE.isPaused = false; STATE.timer = setInterval(step, STATE.stepSpeed); updateUI(); } else if(STATE.isExecuting) { STATE.isPaused = true; clearInterval(STATE.timer); updateUI(); } };
         document.getElementById('btn-next').onclick = () => { if(STATE.isExecuting && !STATE.isWaitingConfirm) { STATE.isPaused = true; updateUI(); step(); } };
-
         // Init
-        lucide.createIcons();
-        resize();
-        setMode('BUILD');
-        setTimeout(quickInit, 300);
-
+        lucide.createIcons(); resizeCanvas(); initResizers(); setMode('BUILD'); setTimeout(quickInit, 300);
     </script>
 </body>
 </html>
