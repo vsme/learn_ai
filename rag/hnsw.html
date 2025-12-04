@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- order: 7 -->
     <!-- icon: 🚢 -->
-    <title>HNSW 3D 分层算法可视化 v3.4</title>
-    <meta name="description" content="HNSW 3D 分层算法可视化 v3.4，展示HNSW图的构建和搜索过程，支持自定义参数和交互操作。">
+    <title>HNSW 3D 分层算法可视化</title>
+    <meta name="description" content="HNSW 3D 分层算法可视化，展示HNSW图的构建和搜索过程，支持自定义参数和交互操作。">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Three.js & OrbitControls -->
@@ -27,25 +27,25 @@
         }
         
         /* Code Highlighting */
-        .code-line { padding-left: 1rem; border-left: 3px solid transparent; opacity: 0.8; transition: all 0.1s; white-space: pre; font-size: 11px; color: #475569; }
-        .code-active { background-color: #eff6ff; border-left-color: #3b82f6; color: #1d4ed8; opacity: 1; font-weight: bold; }
+        .code-line { padding-left: 1rem; border-left: 3px solid transparent; opacity: 0.8; transition: all 0.1s; white-space: pre; font-size: 11px; color: #94a3b8; }
+        .code-active { background-color: #1e293b; border-left-color: #3b82f6; color: #60a5fa; opacity: 1; font-weight: bold; }
 
         /* Log Highlighting */
-        .log-highlight { color: #0ea5e9; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
-        .log-layer { color: #8b5cf6; font-weight: bold; }
-        .log-dist { color: #f59e0b; font-family: 'JetBrains Mono', monospace; }
-        .log-success { color: #10b981; font-weight: bold; }
-        .log-dive { color: #d946ef; font-weight: bold; }
+        .log-highlight { color: #38bdf8; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+        .log-layer { color: #a78bfa; font-weight: bold; }
+        .log-dist { color: #fbbf24; font-family: 'JetBrains Mono', monospace; }
+        .log-success { color: #34d399; font-weight: bold; }
+        .log-dive { color: #e879f9; font-weight: bold; }
 
         /* Scrollbars */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
 
         /* Resizers */
         .resizer-v { width: 4px; background-color: #cbd5e1; cursor: col-resize; transition: background-color 0.2s; z-index: 50; flex-shrink: 0; }
         .resizer-v:hover, .resizer-v.resizing { background-color: #3b82f6; }
-        .resizer-h { height: 4px; background-color: #cbd5e1; cursor: row-resize; transition: background-color 0.2s; z-index: 50; flex-shrink: 0; width: 100%; }
+        .resizer-h { height: 4px; background-color: #1e293b; cursor: row-resize; transition: background-color 0.2s; z-index: 50; flex-shrink: 0; width: 100%; border-top: 1px solid #334155; }
         .resizer-h:hover, .resizer-h.resizing { background-color: #3b82f6; }
 
         /* Layer Labels */
@@ -72,73 +72,105 @@
         #loading { position: fixed; inset: 0; background: #f8fafc; z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 0.5s; }
     </style>
 </head>
-<body class="h-screen flex overflow-hidden text-slate-600">
+<body class="h-screen flex flex-col overflow-hidden text-slate-600">
 
     <div id="loading"><div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-500"></div></div>
 
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 h-14 flex items-center justify-between px-6 flex-shrink-0 z-20 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-600 p-1.5 rounded text-white">
+                <i data-lucide="layers" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-slate-800 leading-none">HNSW 3D 分层算法可视化</h1>
+                <div class="text-[10px] text-slate-500 mt-0.5">分层导航小世界图构建与搜索</div>
+            </div>
+             <!-- GitHub Repo stars -->
+            <a
+              href="https://github.com/vsme/ai-viz"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ml-2"
+            >
+              <img
+                src="//img.shields.io/github/stars/vsme/ai-viz"
+                alt="GitHub Repo stars"
+              />
+            </a>
+        </div>
+        <div class="flex items-center gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-1"><i data-lucide="mouse-pointer-2" class="w-3 h-3"></i> <span>拖拽旋转</span></div>
+            <div class="flex items-center gap-1"><i data-lucide="zoom-in" class="w-3 h-3"></i> <span>滚轮缩放</span></div>
+             <div class="flex items-center gap-1"><i data-lucide="move" class="w-3 h-3"></i> <span>右键平移</span></div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden relative" id="main-container">
+
     <!-- LEFT: Code & Log -->
-    <aside class="w-[400px] flex flex-col border-r border-slate-200 z-10 glass-panel transition-all relative" id="left-panel">
-        <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
-            <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                <i data-lucide="code" class="w-4 h-4 text-blue-600"></i> HNSW 核心逻辑
+    <aside class="w-[400px] flex flex-col border-r border-slate-700 z-10 bg-slate-900 transition-all relative" id="left-panel">
+        <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900">
+            <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <i data-lucide="code" class="w-4 h-4 text-blue-400"></i> HNSW 核心逻辑
             </h2>
-            <span id="layer-indicator" class="text-[10px] px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 font-mono font-bold">Layer: -</span>
+            <span id="layer-indicator" class="text-[10px] px-2 py-0.5 rounded bg-indigo-900/50 text-indigo-300 border border-indigo-800 font-mono font-bold">Layer: -</span>
         </div>
         
-        <div class="flex-1 overflow-auto py-4 mono leading-relaxed custom-scrollbar bg-white" id="code-area">
+        <div class="flex-1 overflow-auto py-4 mono leading-relaxed custom-scrollbar bg-slate-900" id="code-area">
             <!-- INSERT LOGIC -->
             <div id="code-insert" class="mb-6">
-                <div class="px-4 text-emerald-600 font-bold mb-2 text-xs bg-emerald-50 py-1 mx-2 rounded border border-emerald-100"># 插入节点 (Insert)</div>
+                <div class="px-4 text-emerald-400 font-bold mb-2 text-xs bg-emerald-900/20 py-1 mx-2 rounded border border-emerald-900/30"># 插入节点 (Insert)</div>
                 <div id="ln-ins-def" class="code-line">def insert(q, M, M_max):</div>
                 <div id="ln-ins-level" class="code-line pl-4">L = get_random_level()</div>
                 <div id="ln-ins-entry" class="code-line pl-4">curr_node = entry_point</div>
-                <div class="code-line pl-4 text-slate-400"># 阶段1: 快速下潜 (Zoom-in)</div>
-                <div id="ln-ins-p1-loop" class="code-line pl-4"><span class="text-purple-600">for</span> lc <span class="text-purple-600">in</span> range(L_max, L, -1):</div>
+                <div class="code-line pl-4 text-slate-500"># 阶段1: 快速下潜 (Zoom-in)</div>
+                <div id="ln-ins-p1-loop" class="code-line pl-4"><span class="text-purple-400">for</span> lc <span class="text-purple-400">in</span> range(L_max, L, -1):</div>
                 <div id="ln-ins-p1-search" class="code-line pl-8">curr_node = search_layer(q, curr_node, 1, lc)</div>
-                <div class="code-line pl-4 text-slate-400"># 阶段2: 逐层构建 (Construction)</div>
-                <div id="ln-ins-p2-loop" class="code-line pl-4"><span class="text-purple-600">for</span> lc <span class="text-purple-600">in</span> range(min(L_max, L), -1, -1):</div>
+                <div class="code-line pl-4 text-slate-500"># 阶段2: 逐层构建 (Construction)</div>
+                <div id="ln-ins-p2-loop" class="code-line pl-4"><span class="text-purple-400">for</span> lc <span class="text-purple-400">in</span> range(min(L_max, L), -1, -1):</div>
                 <div id="ln-ins-p2-search" class="code-line pl-8">neighbors = search_layer(q, curr_node, ef, lc)</div>
                 <div id="ln-ins-p2-select" class="code-line pl-8">neighbors = select_neighbors(neighbors, M)</div>
                 <div id="ln-ins-p2-conn" class="code-line pl-8">add_connections(q, neighbors, lc)</div>
                 <div id="ln-ins-p2-entry" class="code-line pl-8">curr_node = q</div>
-                <div id="ln-ins-update-ep" class="code-line pl-4"><span class="text-purple-600">if</span> L > L_max: entry_point = q</div>
+                <div id="ln-ins-update-ep" class="code-line pl-4"><span class="text-purple-400">if</span> L > L_max: entry_point = q</div>
             </div>
 
             <!-- SEARCH LOGIC -->
             <div id="code-search" class="mb-6 hidden">
-                <div class="px-4 text-amber-600 font-bold mb-2 text-xs bg-amber-50 py-1 mx-2 rounded border border-amber-100"># 搜索 (KNN Query)</div>
+                <div class="px-4 text-amber-400 font-bold mb-2 text-xs bg-amber-900/20 py-1 mx-2 rounded border border-amber-900/30"># 搜索 (KNN Query)</div>
                 <div id="ln-q-def" class="code-line">def search_knn(q, K):</div>
                 <div id="ln-q-entry" class="code-line pl-4">curr_node = entry_point</div>
-                <div class="code-line pl-4 text-slate-400"># 阶段1: 顶层下潜</div>
-                <div id="ln-q-p1-loop" class="code-line pl-4"><span class="text-purple-600">for</span> lc <span class="text-purple-600">in</span> range(L_max, 0, -1):</div>
+                <div class="code-line pl-4 text-slate-500"># 阶段1: 顶层下潜</div>
+                <div id="ln-q-p1-loop" class="code-line pl-4"><span class="text-purple-400">for</span> lc <span class="text-purple-400">in</span> range(L_max, 0, -1):</div>
                 <div id="ln-q-p1-greedy" class="code-line pl-8">curr_node = search_layer(q, curr_node, 1, lc)</div>
-                <div class="code-line pl-4 text-slate-400"># 阶段2: 底层精搜</div>
+                <div class="code-line pl-4 text-slate-500"># 阶段2: 底层精搜</div>
                 <div id="ln-q-p2-search" class="code-line pl-4">candidates = search_layer(q, curr_node, ef, 0)</div>
-                <div id="ln-q-return" class="code-line pl-4"><span class="text-purple-600">return</span> top_k(candidates, K)</div>
+                <div id="ln-q-return" class="code-line pl-4"><span class="text-purple-400">return</span> top_k(candidates, K)</div>
             </div>
 
             <!-- SEARCH_LAYER DETAIL -->
-            <div class="mt-6 border-t border-slate-200 pt-4 bg-slate-50/30">
-                <div class="px-4 text-blue-600 font-bold mb-2 text-xs"># 贪心搜索细节 (search_layer)</div>
+            <div class="mt-6 border-t border-slate-700 pt-4 bg-slate-800/50">
+                <div class="px-4 text-blue-400 font-bold mb-2 text-xs"># 贪心搜索细节 (search_layer)</div>
                 <div id="ln-sl-def" class="code-line">def search_layer(q, entry, ef, lc):</div>
                 <div id="ln-sl-init" class="code-line pl-4">candidates = [entry]</div>
                 <div id="ln-sl-visit" class="code-line pl-4">visited = {entry}</div>
-                <div id="ln-sl-loop" class="code-line pl-4"><span class="text-pink-600">while</span> candidates:</div>
+                <div id="ln-sl-loop" class="code-line pl-4"><span class="text-pink-400">while</span> candidates:</div>
                 <div id="ln-sl-pop" class="code-line pl-8">curr = get_closest(candidates, q)</div>
-                <div id="ln-sl-prune" class="code-line pl-8"><span class="text-pink-600">if</span> dist(curr, q) > dist(furthest, q): <span class="text-pink-600">break</span></div>
-                <div id="ln-sl-nb" class="code-line pl-8"><span class="text-pink-600">for</span> nb <span class="text-pink-600">in</span> curr.neighbors[lc]:</div>
-                <div id="ln-sl-update" class="code-line pl-12"><span class="text-pink-600">if</span> nb <span class="text-pink-600">not in</span> visited: candidates.add(nb)</div>
-                <div id="ln-sl-ret" class="code-line pl-4"><span class="text-pink-600">return</span> top_ef(candidates)</div>
+                <div id="ln-sl-prune" class="code-line pl-8"><span class="text-pink-400">if</span> dist(curr, q) > dist(furthest, q): <span class="text-pink-400">break</span></div>
+                <div id="ln-sl-nb" class="code-line pl-8"><span class="text-pink-400">for</span> nb <span class="text-pink-400">in</span> curr.neighbors[lc]:</div>
+                <div id="ln-sl-update" class="code-line pl-12"><span class="text-pink-400">if</span> nb <span class="text-pink-400">not in</span> visited: candidates.add(nb)</div>
+                <div id="ln-sl-ret" class="code-line pl-4"><span class="text-pink-400">return</span> top_ef(candidates)</div>
             </div>
         </div>
         
-        <div id="resizer-left-split" class="resizer-h border-t border-slate-200 bg-slate-50"></div>
+        <div id="resizer-left-split" class="resizer-h border-t border-slate-700 bg-slate-900"></div>
 
         <!-- Logger -->
-        <div id="log-panel" class="bg-white flex flex-col min-h-[100px]" style="height: 160px;">
-            <div class="px-3 py-1 text-[10px] text-slate-500 uppercase font-bold bg-slate-50 border-b border-slate-200 flex-shrink-0">执行日志</div>
-            <div id="log-container" class="flex-1 overflow-y-auto p-3 mono text-[10px] text-slate-600 space-y-1.5 custom-scrollbar bg-white">
-                <div class="italic text-slate-400">系统就绪。</div>
+        <div id="log-panel" class="bg-slate-900 flex flex-col min-h-[100px]" style="height: 160px;">
+            <div class="px-3 py-1 text-[10px] text-slate-400 uppercase font-bold bg-slate-800 border-b border-slate-700 flex-shrink-0">执行日志</div>
+            <div id="log-container" class="flex-1 overflow-y-auto p-3 mono text-[10px] text-slate-300 space-y-1.5 custom-scrollbar bg-slate-900">
+                <div class="italic text-slate-500">系统就绪。</div>
             </div>
         </div>
     </aside>
@@ -272,6 +304,7 @@
             <span id="status-maxlayer">Max Layer: 0</span>
         </div>
     </aside>
+    </div> <!-- End main-container -->
 
     <script>
         // --- THREE.JS SETUP ---
